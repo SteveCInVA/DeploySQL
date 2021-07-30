@@ -1,0 +1,223 @@
+.NAME
+    SqlRole
+
+.DESCRIPTION
+    The SqlRole DSC resource is used to create a server role, when
+    Ensure is set to 'Present', or remove a server role, when Ensure
+    is set to 'Absent'. The resource also manages members in both built-in
+    and user created server roles.
+
+    When the target role is sysadmin the DSC resource will prevent the user 
+    'sa' from being removed. This is done to keep the DSC resource from 
+    throwing an error since SQL Server does not allow this user to be removed.
+
+    For more information about server roles, please read the below articles.
+
+    * https://msdn.microsoft.com/en-us/library/ee677627.aspx
+    * https://msdn.microsoft.com/en-us/library/ms188659.aspx
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlRole.
+
+.PARAMETER ServerRoleName
+    Key - String
+    The name of of SQL Server Database Engine role to add or remove.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    An enumerated value that describes if the server role is added ('Present') or dropped ('Absent'). Default value is 'Present'.
+
+.PARAMETER Members
+    Write - StringArray
+    The members the server role should have. This parameter will replace all the current server role members with the specified members.
+
+.PARAMETER MembersToInclude
+    Write - StringArray
+    The members the server role should include. This parameter will only add members to a server role. Can not be used at the same time as parameter Members.
+
+.PARAMETER MembersToExclude
+    Write - StringArray
+    The members the server role should exclude. This parameter will only remove members from a server role. Can only be used when parameter Ensure is set to 'Present'. Can not be used at the same time as parameter Members.
+
+.EXAMPLE 1
+
+This example shows how to ensure that both the server role named
+MyServerRole1 and MyServerRole2 is present on instance
+'sqltest.company.local\DSC'.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRole 'Add_ServerRole_MyServerRole1'
+        {
+            Ensure               = 'Present'
+            ServerRoleName       = 'MyServerRole1'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlRole 'Add_ServerRole_MyServerRole2'
+        {
+            Ensure               = 'Present'
+            ServerRoleName       = 'MyServerRole2'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the server role named
+serverRoleToDelete is not present on instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRole 'Remove_ServerRole'
+        {
+            Ensure               = 'Absent'
+            ServerRoleName       = 'serverRoleToDelete'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to ensure that the server role named
+AdminSqlforBI is present on instance sqltest.company.local\DSC and only logins
+CONTOSO\SQLAdmin and CONTOSO\SQLAdminBI are members of this role.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRole 'Add_ServerRole_AdminSqlforBI'
+        {
+            Ensure               = 'Present'
+            ServerRoleName       = 'AdminSqlforBI'
+            Members              = 'CONTOSO\SQLAdmin', 'CONTOSO\SQLAdminBI'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example shows how to ensure that the server role named
+AdminSqlforBI is present on instance sqltest.company.local\DSC and logins
+CONTOSO\John and CONTOSO\Kelly are added as members of this role.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRole 'Add_ServerRole_AdminSqlforBI'
+        {
+            Ensure               = 'Present'
+            ServerRoleName       = 'AdminSqlforBI'
+            MembersToInclude     = 'CONTOSO\John', 'CONTOSO\Kelly'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 5
+
+This example shows how to ensure that the server role named
+AdminSqlforBI is present on instance sqltest.company.local\DSC and logins
+CONTOSO\Mark and CONTOSO\Lucy are not members of this role.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRole 'Drop_ServerRole_AdminSqlforBI'
+        {
+            Ensure               = 'Present'
+            ServerRoleName       = 'AdminSqlforBI'
+            MembersToExclude     = 'CONTOSO\Mark', 'CONTOSO\Lucy'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

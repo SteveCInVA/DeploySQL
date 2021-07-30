@@ -1,0 +1,169 @@
+.NAME
+    SqlDatabaseObjectPermission
+
+.DESCRIPTION
+    The SqlDatabaseObjectPermission DSC resource manage the permissions
+    of database objects in a database for a SQL Server instance.
+
+    For more information about permission names that can be managed, see the
+    property names of the https://docs.microsoft.com/en-us/dotnet/api/microsoft.sqlserver.management.smo.objectpermissionset#properties class.
+
+    >Note: When revoking permission with PermissionState 'GrantWithGrant', both the
+    >grantee and all the other users the grantee has granted the same permission to,
+    >will also get their permission revoked.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server 2012 or later.
+    * Target machine must have access to the SQLPS PowerShell module or the
+      SqlServer PowerShell module.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabaseObjectPermission.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the name of the SQL Server instance to be configured.
+
+.PARAMETER DatabaseName
+    Key - String
+    Specifies the name of the database where the object resides.
+
+.PARAMETER SchemaName
+    Key - String
+    Specifies the name of the schema for the database object.
+
+.PARAMETER ObjectName
+    Key - String
+    Specifies the name of the database object to set permission for. Can be an empty value when setting permission for a schema.
+
+.PARAMETER ObjectType
+    Key - String
+    Allowed values: Schema, Table, View, StoredProcedure
+    Specifies the type of the database object specified in parameter ObjectName.
+
+.PARAMETER Name
+    Key - String
+    Specifies the name of the database user, user-defined database role, or database application role that will have the permission.
+
+.PARAMETER Permission
+    Required - InstanceArray
+    Specifies the permissions for the database object and the principal. The permissions is an array of embedded instances of the DSC_DatabaseObjectPermission CIM class.
+
+.PARAMETER ServerName
+    Write - String
+    Specifies the host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER Force
+    Write - Boolean
+    Specifies that permissions that has parameter Ensure set to 'Present' (the default value for permissions) should always be enforced even if that encompasses cascading revocations. An example if the desired state is 'Grant' but the current state is 'GrantWithGrant'. If parameter Force is set to $true the With Grant permission is revoked, if set to $false an exception is thrown since the desired state could not be set. Default is to throw an exception.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the user 'TestAppRole' is given
+the desired permission for a table in the database "AdventureWorks".
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseObjectPermission 'Table1_TestAppRole_Permission'
+        {
+            ServerName           = 'testclu01a'
+            InstanceName         = 'sql2014'
+            DatabaseName         = 'AdventureWorks'
+            SchemaName           = 'dbo'
+            ObjectName           = 'Table1'
+            ObjectType           = 'Table'
+            Name                 = 'TestAppRole'
+            Permission           = @(
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'GrantWithGrant'
+                    Permission = @('Select')
+                }
+
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'Grant'
+                    Permission = @('Update')
+                }
+
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'Deny'
+                    Permission = @('Delete', 'Alter')
+                }
+            )
+
+            PSDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to revoke permissions for the user 'TestAppRole'
+for a table in the database "AdventureWorks".
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseObjectPermission 'Table1_TestAppRole_Permission'
+        {
+            ServerName           = 'testclu01a'
+            InstanceName         = 'sql2014'
+            DatabaseName         = 'AdventureWorks'
+            SchemaName           = 'dbo'
+            ObjectName           = 'Table1'
+            ObjectType           = 'Table'
+            Name                 = 'TestAppRole'
+            Permission           = @(
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'GrantWithGrant'
+                    Permission = @('Select')
+                    Ensure     = 'Absent'
+                }
+
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'Grant'
+                    Permission = @('Update')
+                    Ensure     = 'Absent'
+                }
+
+                DSC_DatabaseObjectPermission
+                {
+                    State      = 'Deny'
+                    Permission = @('Delete', 'Alter')
+                    Ensure     = 'Absent'
+                }
+            )
+
+            PSDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

@@ -1,0 +1,27 @@
+.NAME
+    SqlDatabaseOwner
+
+# DEPRECATION NOTICE
+
+    The SqlDatabaseOwner DSC resource is DEPRECATED. The resource is
+    replaced by a property in the resource SqlDatabase.
+
+    The documentation, examples, unit test, and integration tests have been
+    removed. This resource will be removed in a future release.
+
+.PARAMETER DatabaseName
+    Key - String
+    The name of database to be configured.
+
+.PARAMETER Name
+    Required - String
+    The name of the login that will become a owner of the desired sql database.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL instance to be configured.
+

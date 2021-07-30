@@ -1,0 +1,44 @@
+.NAME
+    SqlServerNetwork
+
+# DEPRECATION NOTICE
+
+    The SqlServerNetwork DSC resource is DEPRECATED. The resource
+    is replaced by the resources SqlServerProtocol and SqlServerProtocolTcpIp.
+
+    The documentation, examples, unit test, and integration tests have been
+    removed. This resource will be removed in a future release.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL instance to be configured.
+
+.PARAMETER ProtocolName
+    Required - String
+    Allowed values: Tcp
+    The name of network protocol to be configured. Only tcp is currently supported.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is $env:COMPUTERNAME.
+
+.PARAMETER IsEnabled
+    Write - Boolean
+    Enables or disables the network protocol.
+
+.PARAMETER TcpDynamicPort
+    Write - Boolean
+    Specifies whether the SQL Server instance should use a dynamic port. Value cannot be set to 'True' if TcpPort is set to a non-empty string.
+
+.PARAMETER TcpPort
+    Write - String
+    The TCP port(s) that SQL Server should be listening on. If the IP address should listen on more than one port, list all ports separated with a comma ('1433,1500,1501'). To use this parameter set TcpDynamicPorts to 'False'.
+
+.PARAMETER RestartService
+    Write - Boolean
+    If set to $true then SQL Server and dependent services will be restarted if a change to the configuration is made. The default value is $false.
+
+.PARAMETER RestartTimeout
+    Write - UInt16
+    Timeout value for restarting the SQL Server services. The default value is 120 seconds.
+

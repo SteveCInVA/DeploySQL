@@ -1,0 +1,229 @@
+.NAME
+    SqlAGReplica
+
+.DESCRIPTION
+    The SqlAGReplica DSC resource is used to create, remove, and update an
+    Always On Availability Group Replica.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * 'NT SERVICE\ClusSvc' or 'NT AUTHORITY\SYSTEM' must have the 'Connect SQL',
+      'Alter Any Availability Group', and 'View Server State' permissions.
+    * There are circumstances where the PowerShell module SQLPS that is install
+      together with SQL Server does not work with all features of this resource.
+      The solution is to install the PowerShell module https://www.powershellgallery.com/packages/SqlServer
+      from the PowerShell Gallery. The module must be installed in a machine-wide
+      path of env:PSModulePath so it is found when LCM runs the DSC resource.
+      This will also make all SqlServerDsc DSC resources use the PowerShell
+      module SqlServer instead of the PowerShell module SQLPS.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAGReplica.
+
+.PARAMETER Name
+    Key - String
+    The name of the availability group replica. For named instances this must be in the following format 'ServerName\InstanceName'.
+
+.PARAMETER AvailabilityGroupName
+    Key - String
+    The name of the availability group.
+
+.PARAMETER ServerName
+    Required - String
+    Hostname of the SQL Server to be configured.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL Server instance to be configured.
+
+.PARAMETER PrimaryReplicaServerName
+    Write - String
+    Hostname of the SQL Server where the primary replica is expected to be active. If the primary replica is not found here, the resource will attempt to find the host that holds the primary replica and connect to it.
+
+.PARAMETER PrimaryReplicaInstanceName
+    Write - String
+    Name of the SQL Server Database Engine instance where the primary replica lives.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies if the availability group replica should be present or absent. Default value is 'Present'.
+
+.PARAMETER AvailabilityMode
+    Write - String
+    Allowed values: AsynchronousCommit, SynchronousCommit
+    Specifies the replica availability mode. When creating a replica the default is 'AsynchronousCommit'.
+
+.PARAMETER BackupPriority
+    Write - UInt32
+    Specifies the desired priority of the replicas in performing backups. The acceptable values for this parameter are: integers from 0 through 100. Of the set of replicas which are online and available, the replica that has the highest priority performs the backup. When creating a replica the default is 50.
+
+.PARAMETER ConnectionModeInPrimaryRole
+    Write - String
+    Allowed values: AllowAllConnections, AllowReadWriteConnections
+    Specifies how the availability replica handles connections when in the primary role.
+
+.PARAMETER ConnectionModeInSecondaryRole
+    Write - String
+    Allowed values: AllowNoConnections, AllowReadIntentConnectionsOnly, AllowAllConnections
+    Specifies how the availability replica handles connections when in the secondary role.
+
+.PARAMETER EndpointHostName
+    Write - String
+    Specifies the hostname or IP address of the availability group replica endpoint. When creating a group the default is the instance network name which is set in the code because the value can only be determined when connected to the SQL Server instance.
+
+.PARAMETER FailoverMode
+    Write - String
+    Allowed values: Automatic, Manual
+    Specifies the failover mode. When creating a replica the default value is 'Manual'.
+
+.PARAMETER ReadOnlyRoutingConnectionUrl
+    Write - String
+    Specifies the fully qualified domain name (FQDN) and port to use when routing to the replica for read only connections.
+
+.PARAMETER ReadOnlyRoutingList
+    Write - StringArray
+    Specifies an ordered list of replica server names that represent the probe sequence for connection director to use when redirecting read-only connections through this availability replica. This parameter applies if the availability replica is the current primary replica of the availability group.
+
+.PARAMETER ProcessOnlyOnActiveNode
+    Write - Boolean
+    Specifies that the resource will only determine if a change is needed if the target node is the active host of the SQL Server instance.
+
+.PARAMETER EndpointPort
+    Read - UInt16
+    Returns the network port the endpoint is listening on.
+
+.PARAMETER EndpointUrl
+    Read - String
+    Returns the URL of the availability group replica endpoint.
+
+.PARAMETER IsActiveNode
+    Read - Boolean
+    Returns if the current node is actively hosting the SQL Server Database Engine instance.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the Availability Group Replica 'SQL2'
+exists in the Availability Group 'TestAG'.
+
+In the event this is applied to a Failover Cluster Instance (FCI), the
+ProcessOnlyOnActiveNode property will tell the Test-TargetResource function
+to evaluate if any changes are needed if the node is actively hosting the
+SQL Server Instance.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node $AllNodes.NodeName
+    {
+        # Adding the required service account to allow the cluster to log into SQL
+        SqlLogin 'AddNTServiceClusSvc'
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Add the required permissions to the cluster service login
+        SqlPermission 'AddNTServiceClusSvcPermissions'
+        {
+            DependsOn            = '[SqlLogin]AddNTServiceClusSvc'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint 'HADREndpoint'
+        {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlwaysOnService EnableHADR
+        {
+            Ensure               = 'Present'
+            InstanceName         = 'MSSQLSERVER'
+            ServerName           = $Node.NodeName
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Add the availability group replica to the availability group
+        SqlAGReplica 'AddReplica'
+        {
+            Ensure                     = 'Present'
+            Name                       = $Node.NodeName
+            AvailabilityGroupName      = 'TestAG'
+            ServerName                 = $Node.NodeName
+            InstanceName               = 'MSSQLSERVER'
+            PrimaryReplicaServerName   = 'SQL1'
+            PrimaryReplicaInstanceName = 'MSSQLSERVER'
+            ProcessOnlyOnActiveNode    = $true
+
+            DependsOn                  = '[SqlAlwaysOnService]EnableHADR'
+
+            PsDscRunAsCredential       = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the Availability Group Replica 'SQL2'
+does not exist in the Availability Group 'TestAG'.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node $AllNodes.NodeName
+    {
+        # Add the availability group replica to the availability group
+        SqlAGReplica 'RemoveReplica'
+        {
+            Ensure                     = 'Absent'
+            Name                       = $Node.NodeName
+            AvailabilityGroupName      = 'TestAG'
+            ServerName                 = $Node.NodeName
+            InstanceName               = 'MSSQLSERVER'
+            PrimaryReplicaServerName   = 'SQL1'
+            PrimaryReplicaInstanceName = 'MSSQLSERVER'
+
+            PsDscRunAsCredential       = $SqlAdministratorCredential
+        }
+    }
+}
+

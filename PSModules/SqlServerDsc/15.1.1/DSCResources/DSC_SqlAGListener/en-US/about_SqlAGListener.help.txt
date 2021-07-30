@@ -1,0 +1,252 @@
+.NAME
+    SqlAGListener
+
+.DESCRIPTION
+    The SqlAGListener DSC resource is used to configure the listener
+    for an Always On Availability Group.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Target machine must have access to the SQLPS PowerShell module or the SqlServer
+      PowerShell module.
+    * Requires that the Cluster name Object (CNO) has been delegated the right
+      Create Computer Object in the organizational unit (OU) in which the
+      Cluster Name Object (CNO) resides.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAGListener.
+
+.PARAMETER InstanceName
+    Key - String
+    The SQL Server instance name of the primary replica.
+
+.PARAMETER ServerName
+    Required - String
+    The host name or fully qualified domain name (FQDN) of the primary replica.
+
+.PARAMETER Name
+    Required - String
+    The name of the availability group listener, max 15 characters. This name will be used as the Virtual Computer Object (VCO).
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    If the availability group listener should be present or absent. Default value is 'Present'.
+
+.PARAMETER AvailabilityGroup
+    Key - String
+    The name of the availability group to which the availability group listener is or will be connected.
+
+.PARAMETER IpAddress
+    Write - StringArray
+    The IP address used for the availability group listener, in the format '192.168.10.45/255.255.252.0'. If using DHCP, set to the first IP-address of the DHCP subnet, in the format '192.168.8.1/255.255.252.0'. Must be valid in the cluster-allowed IP range.
+
+.PARAMETER Port
+    Write - UInt16
+    The port used for the availability group listener.
+
+.PARAMETER DHCP
+    Write - Boolean
+    If DHCP should be used for the availability group listener instead of static IP address.
+
+.EXAMPLE 1
+
+This example will add an Availability Group listener with the same name
+as the cluster role VCO.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'AvailabilityGroupListenerWithSameNameAsVCO'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AG-01'
+            Name                 = 'AG-01'
+            IpAddress            = '192.168.0.73/255.255.255.0'
+            Port                 = 5301
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example will add an Availability Group listener with a different
+than the cluster role VCO.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'AvailabilityGroupListenerWithDifferentNameAsVCO'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AvailabilityGroup-01'
+            Name                 = 'AG-01'
+            IpAddress            = '192.168.0.74/255.255.255.0'
+            Port                 = 5302
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example will remove an Availability Group listener with a different
+name than cluster role VCO.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'RemoveAvailabilityGroupListenerWithDifferentNameAsVCO'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AvailabilityGroup-01'
+            Name                 = 'AG-01'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example will remove an Availability Group listener with the same
+name as the cluster role VCO.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'RemoveAvailabilityGroupListenerWithSameNameAsVCO'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AG-01'
+            Name                 = "AG-01"
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 5
+
+This example will add an Availability Group listener using DHCP on the
+default server subnet.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'AvailabilityGroupListenerWithSameNameAsVCO'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AG-01'
+            Name                 = 'AG-01'
+            <#
+                If not specifying parameter DHCP, then the default will be
+                DHCP with the default server subnet.
+            #>
+            DHCP                 = $true
+            Port                 = 5301
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 6
+
+This example will add an Availability Group listener using DHCP with a specific subnet.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAGListener 'AvailabilityGroupListenerWithSameNameAsVCO'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SQLNODE01.company.local'
+            InstanceName         = 'MSSQLSERVER'
+            AvailabilityGroup    = 'AG-01'
+            Name                 = 'AG-01'
+            DHCP                 = $true
+            IpAddress            = '192.168.0.1/255.255.252.0'
+            Port                 = 5301
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

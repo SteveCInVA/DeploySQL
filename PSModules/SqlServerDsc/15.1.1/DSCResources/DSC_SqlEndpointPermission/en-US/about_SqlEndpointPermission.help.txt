@@ -1,0 +1,323 @@
+.NAME
+    SqlEndpointPermission
+
+.DESCRIPTION
+    The SqlEndpointPermission DSC resource is used to give connect
+    permission to an endpoint for a user (login).
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlEndpointPermission.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER Principal
+    Key - String
+    The login to which permission will be set.
+
+.PARAMETER Name
+    Required - String
+    The name of the endpoint.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    If the permission should be present or absent. Default value is 'Present'.
+
+.PARAMETER Permission
+    Write - String
+    Allowed values: CONNECT
+    The permission to set for the login. Valid value for permission is only 'CONNECT'.
+
+.EXAMPLE 1
+
+This example will add connect permission to the credentials provided in
+$SqlServiceCredential to the endpoint named 'DefaultMirrorEndpoint'.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpointPermission 'SQLConfigureEndpointPermission'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SQLTEST'
+            InstanceName         = 'DSCINSTANCE'
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceCredential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example will add connect permission to the credentials provided in
+$SqlServiceCredential to the endpoint named 'DefaultMirrorEndpoint'.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpointPermission 'SQLConfigureEndpointPermission'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'SQLTEST'
+            InstanceName         = 'DSCINSTANCE'
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceCredential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example will add connect permission to both an Always On primary
+replica and an Always On secondary replica, and where each replica has
+a different SQL service account.
+
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', '', Justification='The variable $ConfigurationData is used by the HQRM test')]
+param ()
+
+$ConfigurationData = @{
+    AllNodes = @(
+        @{
+            NodeName        = '*'
+            InstanceName = 'MSSQLSERVER'
+
+            # Not recommended for production. Only set here to pass CI.
+            PsDscAllowPlainTextPassword = $true
+        },
+
+        @{
+            NodeName = 'SQLNODE01.company.local'
+            Role     = 'PrimaryReplica'
+        },
+
+        @{
+            NodeName = 'SQLNODE02.company.local'
+            Role     = 'SecondaryReplica'
+        }
+    )
+}
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceNode1Credential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceNode2Credential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node $AllNodes.Where{ $_.Role -eq 'PrimaryReplica' }.NodeName
+    {
+        SqlEndpointPermission 'SQLConfigureEndpointPermissionPrimary'
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode1Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpointPermission 'SQLConfigureEndpointPermissionSecondary'
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode2Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+
+    Node $AllNodes.Where{ $_.Role -eq 'SecondaryReplica' }.NodeName
+    {
+        SqlEndpointPermission 'SQLConfigureEndpointPermissionPrimary'
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode1Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpointPermission 'SQLConfigureEndpointPermissionSecondary'
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode2Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example will remove connect permission to both an Always On primary replica and an
+Always On secondary replica, and where each replica has a different SQL service account.
+
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', '', Justification='The variable $ConfigurationData is used by the HQRM test')]
+param ()
+
+$ConfigurationData = @{
+    AllNodes = @(
+        @{
+            NodeName        = '*'
+            InstanceName = 'MSSQLSERVER'
+
+            # Not recommended for production. Only set here to pass CI.
+            PsDscAllowPlainTextPassword = $true
+        },
+
+        @{
+            NodeName = 'SQLNODE01.company.local'
+            Role     = 'PrimaryReplica'
+        },
+
+        @{
+            NodeName = 'SQLNODE02.company.local'
+            Role     = 'SecondaryReplica'
+        }
+    )
+}
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceNode1Credential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceNode2Credential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node $AllNodes.Where{ $_.Role -eq 'PrimaryReplica' }.NodeName
+    {
+        SqlEndpointPermission 'RemoveSQLConfigureEndpointPermissionPrimary'
+        {
+            Ensure               = 'Absent'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode1Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpointPermission 'RemoveSQLConfigureEndpointPermissionSecondary'
+        {
+            Ensure               = 'Absent'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode2Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+
+    Node $AllNodes.Where{ $_.Role -eq 'SecondaryReplica' }.NodeName
+    {
+        SqlEndpointPermission 'RemoveSQLConfigureEndpointPermissionPrimary'
+        {
+            Ensure               = 'Absent'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode1Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpointPermission 'RemoveSQLConfigureEndpointPermissionSecondary'
+        {
+            Ensure               = 'Absent'
+            ServerName           = $Node.NodeName
+            InstanceName         = $Node.InstanceName
+            Name                 = 'DefaultMirrorEndpoint'
+            Principal            = $SqlServiceNode2Credential.UserName
+            Permission           = 'CONNECT'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

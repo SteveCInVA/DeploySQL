@@ -1,0 +1,363 @@
+.NAME
+    SqlScript
+
+.DESCRIPTION
+    The SqlScript DSC resource provides the means to run a user generated
+    T-SQL script on the SQL Server instance. Three scripts are required;
+    Get T-SQL script, Set T-SQL script and the Test T-SQL script.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server 2012 or later.
+    * Target machine must have access to the SQLPS PowerShell module or the SqlServer
+      PowerShell module.
+
+    ## Known issues
+
+    * There is a known problem running this resource using PowerShell 4.0.
+    See https://github.com/dsccommunity/SqlServerDsc/issues/273
+    for more information.
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlScript.
+
+    ## Scripts
+
+    ### Get T-SQL Script (GetFilePath)
+
+    The Get T-SQL script is used to query the status when running the cmdlet
+    Get-DscConfiguration, and the result can be found in the property GetResult.
+
+    ### Test T-SQL Script (TestFilePath)
+
+    The Test T-SQL script is used to test if the desired state is met. If Test
+    T-SQL raises an error or returns any value other than 'null' the test fails, thus
+    the Set T-SQL script is run.
+
+    ### Set T-SQL Script (SetFilePath)
+
+    The Set T-SQL script performs the actual change when Test T-SQL script fails.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the name of the SQL Server Database Engine instance. For the default instance specify the value 'MSSQLSERVER'.
+
+.PARAMETER SetFilePath
+    Key - String
+    Path to the T-SQL file that will perform Set action.
+
+.PARAMETER GetFilePath
+    Key - String
+    Path to the T-SQL file that will perform Get action. Any values returned by the T-SQL queries will also be returned when calling Get (for example by using the cmdlet Get-DscConfiguration) through the 'GetResult' property.
+
+.PARAMETER TestFilePath
+    Key - String
+    Path to the T-SQL file that will perform Test action. Any script that does not throw an error or returns NULL is evaluated to $true. The cmdlet Invoke-Sqlcmd treats T-SQL PRINT statements as verbose text, and will not cause the test to return $false.
+
+.PARAMETER ServerName
+    Write - String
+    Specifies the host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER Credential
+    Write - Instance
+    The credentials to authenticate with, using SQL Server Authentication. To authenticate using Windows Authentication assign the credentials to the built-in parameter PsDscRunAsCredential. If neither of the parameters Credential or PsDscRunAsCredential are assigned, then the SYSTEM account will be used to authenticate using Windows Authentication.
+
+.PARAMETER Variable
+    Write - StringArray
+    Specifies, as a string array, a scripting variable for use in the T-SQL script, and sets a value for the variable. Use a Windows PowerShell array to specify multiple variables and their values. For more information how to use this, please go to the help documentation for https://technet.microsoft.com/en-us/library/mt683370.aspx.
+
+.PARAMETER DisableVariables
+    Write - Boolean
+    Specifies, as a boolean, whether or not PowerShell will ignore Invoke-Sqlcmd scripting variables that share a format such as $(variable_name). For more information how to use this, please go to the help documentation for https://technet.microsoft.com/en-us/library/mt683370.aspx.
+
+.PARAMETER QueryTimeout
+    Write - UInt32
+    Specifies, as an integer, the number of seconds after which the T-SQL script execution will time out. In some SQL Server versions there is a bug in Invoke-Sqlcmd where the normal default value 0 (no timeout) is not respected and the default value is incorrectly set to 30 seconds.
+
+.PARAMETER GetResult
+    Read - StringArray
+    Returns the result from the T-SQL script provided in the parameter GetFilePath when Get was called.
+
+.EXAMPLE 1
+
+This example shows how to run SQL script using SQL Authentication.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node localhost
+    {
+        SqlScript 'RunAsSqlCredential'
+        {
+            ServerName   = 'localhost'
+            InstanceName = 'SQL2016'
+            Credential   = $SqlCredential
+
+            SetFilePath  = 'C:\DSCTemp\SQLScripts\Set-RunSQLScript.sql'
+            TestFilePath = 'C:\DSCTemp\SQLScripts\Test-RunSQLScript.sql'
+            GetFilePath  = 'C:\DSCTemp\SQLScripts\Get-RunSQLScript.sql'
+            Variable     = @('FilePath=C:\temp\log\AuditFiles')
+        }
+    }
+}
+
+.EXAMPLE 2
+
+These two example shows how to run SQL script using Windows Authentication.
+First example shows how the resource is run as account SYSTEM. And the second
+example shows how the resource is run with a user account.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $WindowsCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node localhost
+    {
+        SqlScript 'RunAsSYSTEM'
+        {
+            ServerName   = 'localhost'
+            InstanceName = 'SQL2016'
+
+            SetFilePath  = 'C:\DSCTemp\SQLScripts\Set-RunSQLScript-AsSYSTEM.sql'
+            TestFilePath = 'C:\DSCTemp\SQLScripts\Test-RunSQLScript-AsSYSTEM.sql'
+            GetFilePath  = 'C:\DSCTemp\SQLScripts\Get-RunSQLScript-AsSYSTEM.sql'
+            Variable     = @('FilePath=C:\temp\log\AuditFiles')
+        }
+
+        SqlScript 'RunAsUser'
+        {
+            ServerName           = 'localhost'
+            InstanceName         = 'SQL2016'
+
+            SetFilePath          = 'C:\DSCTemp\SQLScripts\Set-RunSQLScript-AsUSER.sql'
+            TestFilePath         = 'C:\DSCTemp\SQLScripts\Test-RunSQLScript-AsUSER.sql'
+            GetFilePath          = 'C:\DSCTemp\SQLScripts\Get-RunSQLScript-AsUSER.sql'
+            Variable             = @('FilePath=C:\temp\log\AuditFiles')
+
+            PsDscRunAsCredential = $WindowsCredential
+        }
+
+        SqlScript 'RunAsUser-With30SecondTimeout'
+        {
+            ServerName           = 'localhost'
+            InstanceName         = 'SQL2016'
+
+            SetFilePath          = 'C:\DSCTemp\SQLScripts\Set-RunSQLScript-WithQueryTimeout.sql'
+            TestFilePath         = 'C:\DSCTemp\SQLScripts\Test-RunSQLScript-WithQueryTimeout.sql'
+            GetFilePath          = 'C:\DSCTemp\SQLScripts\Get-RunSQLScript-WithQueryTimeout.sql'
+            QueryTimeout         = 30
+            Variable             = @('FilePath=C:\temp\log\AuditFiles')
+
+            PsDscRunAsCredential = $WindowsCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows one way to create the SQL script files and how to run
+those files.
+
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', '', Justification='The variable $ConfigurationData is used by the HQRM test')]
+param ()
+
+$ConfigurationData = @{
+    AllNodes = @(
+        @{
+            NodeName          = 'localhost'
+
+            ServerName        = $env:COMPUTERNAME
+            InstanceName      = 'DSCTEST'
+
+            DatabaseName      = 'ScriptDatabase1'
+
+            GetSqlScriptPath  = Join-Path -Path $env:SystemDrive -ChildPath ([System.IO.Path]::GetRandomFileName())
+            SetSqlScriptPath  = Join-Path -Path $env:SystemDrive -ChildPath ([System.IO.Path]::GetRandomFileName())
+            TestSqlScriptPath = Join-Path -Path $env:SystemDrive -ChildPath ([System.IO.Path]::GetRandomFileName())
+
+            GetSqlScript      = @'
+SELECT Name FROM sys.databases WHERE Name = '$(DatabaseName)' FOR JSON AUTO
+'@
+
+            TestSqlScript     = @'
+if (select count(name) from sys.databases where name = '$(DatabaseName)') = 0
+BEGIN
+    RAISERROR ('Did not find database [$(DatabaseName)]', 16, 1)
+END
+ELSE
+BEGIN
+    PRINT 'Found database [$(DatabaseName)]'
+END
+'@
+
+            SetSqlScript      = @'
+CREATE DATABASE [$(DatabaseName)]
+'@
+            # Not recommended in production. Only set here to pass CI.
+            PsDscAllowPlainTextPassword = $true
+        }
+    )
+}
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'PSDscResources' -ModuleVersion '2.12.0.0'
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        Script 'CreateFile_GetSqlScript'
+        {
+            SetScript  = {
+                $Using:Node.GetSqlScript | Out-File -FilePath $Using:Node.GetSqlScriptPath -Encoding ascii -NoClobber -Force
+            }
+
+            TestScript = {
+                <#
+                    This takes the string of the $GetScript parameter and creates
+                    a new script block (during runtime in the resource) and then
+                    runs that script block.
+                #>
+                $getScriptResult = & ([ScriptBlock]::Create($GetScript))
+
+                return $getScriptResult.Result -eq $Using:Node.GetSqlScript
+            }
+
+            GetScript  = {
+                $fileContent = $null
+
+                if (Test-Path -Path $Using:Node.GetSqlScriptPath)
+                {
+                    $fileContent = Get-Content -Path $Using:Node.GetSqlScriptPath -Raw
+                }
+
+                return @{
+                    Result = $fileContent
+                }
+            }
+        }
+
+        Script 'CreateFile_TestSqlScript'
+        {
+            SetScript  = {
+                $Using:Node.TestSqlScript | Out-File -FilePath $Using:Node.TestSqlScriptPath -Encoding ascii -NoClobber -Force
+            }
+
+            TestScript = {
+                $getScriptResult = & ([ScriptBlock]::Create($GetScript))
+
+                return $getScriptResult.Result -eq $Using:Node.TestSqlScript
+            }
+
+            GetScript  = {
+                $fileContent = $null
+
+                if (Test-Path -Path $Using:Node.TestSqlScriptPath)
+                {
+                    $fileContent = Get-Content -Path $Using:Node.TestSqlScriptPath -Raw
+                }
+
+                return @{
+                    Result = $fileContent
+                }
+            }
+        }
+
+        Script 'CreateFile_SetSqlScript'
+        {
+            SetScript  = {
+                $Using:Node.SetSqlScript | Out-File -FilePath $Using:Node.SetSqlScriptPath -Encoding ascii -NoClobber -Force
+            }
+
+            TestScript = {
+                $getScriptResult = & ([ScriptBlock]::Create($GetScript))
+
+                return $getScriptResult.Result -eq $Using:Node.SetSqlScript
+            }
+
+            GetScript  = {
+                $fileContent = $null
+
+                if (Test-Path -Path $Using:Node.SetSqlScriptPath)
+                {
+                    $fileContent = Get-Content -Path $Using:Node.SetSqlScriptPath -Raw
+                }
+
+                return @{
+                    Result = $fileContent
+                }
+            }
+        }
+
+        SqlScript 'Integration_Test'
+        {
+            ServerName           = $Node.ServerName
+            InstanceName         = $Node.InstanceName
+
+            GetFilePath          = $Node.GetSqlScriptPath
+            TestFilePath         = $Node.TestSqlScriptPath
+            SetFilePath          = $Node.SetSqlScriptPath
+            Variable             = @(
+                ('DatabaseName={0}' -f $Node.DatabaseName)
+            )
+            QueryTimeout         = 30
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example shows how to run SQL script with disabled variables.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node localhost
+    {
+        SqlScript 'RunWithDisabledVariables'
+        {
+            ServerName       = 'localhost'
+            InstanceName     = 'SQL2016'
+            Credential       = $SqlCredential
+
+            SetFilePath      = 'C:\DSCTemp\SQLScripts\Set-RunSQLScript.sql'
+            TestFilePath     = 'C:\DSCTemp\SQLScripts\Test-RunSQLScript.sql'
+            GetFilePath      = 'C:\DSCTemp\SQLScripts\Get-RunSQLScript.sql'
+            DisableVariables = $true
+        }
+    }
+}
+

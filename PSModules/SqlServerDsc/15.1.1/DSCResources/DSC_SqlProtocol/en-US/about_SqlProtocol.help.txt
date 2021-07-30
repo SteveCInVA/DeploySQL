@@ -1,0 +1,259 @@
+.NAME
+    SqlProtocol
+
+.DESCRIPTION
+    The SqlProtocol DSC resource manages the SQL Server protocols
+    for a SQL Server instance.
+
+    For more information about protocol properties look at the following articles:
+
+    * https://docs.microsoft.com/en-us/sql/tools/configuration-manager/tcp-ip-properties-protocols-tab.
+    * https://docs.microsoft.com/en-us/sql/tools/configuration-manager/shared-memory-properties.
+    * https://docs.microsoft.com/en-us/sql/tools/configuration-manager/named-pipes-properties.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Target machine must have access to the SQLPS PowerShell module or the SqlServer
+      PowerShell module.
+    * If a protocol is disabled that prevents the cmdlet Restart-SqlService from
+      contacting the instance to evaluate if it is a cluster. If this is the case
+      then the parameter SuppressRestart must be used to override the restart. It
+      is the same if a protocol is enabled that was previously disabled and no other
+      protocol allows connecting to the instance, then the parameter SuppressRestart
+      must also be used.
+    * When connecting to a Failover Cluster where the account SYSTEM does
+      not have access then the correct credential must be provided in
+      the built-in parameter PSDscRunAsCredential. If not the following error
+      can appear; An internal error occurred.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlProtocol.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the name of the SQL Server instance to enable the protocol for.
+
+.PARAMETER ProtocolName
+    Key - String
+    Allowed values: SharedMemory, NamedPipes, TcpIp
+    Specifies the name of network protocol to be configured.
+
+.PARAMETER ServerName
+    Write - String
+    Specifies the host name of the SQL Server to be configured. If the SQL Server belongs to a cluster or availability group specify the host name for the listener or cluster group. Default value is the current computer name.
+
+.PARAMETER Enabled
+    Write - Boolean
+    Specifies if the protocol should be enabled or disabled.
+
+.PARAMETER ListenOnAllIpAddresses
+    Write - Boolean
+    Specifies to listen on all IP addresses. Only used for the TCP/IP protocol, ignored for all other protocols.
+
+.PARAMETER KeepAlive
+    Write - SInt32
+    Specifies the keep alive duration in milliseconds. Only used for the TCP/IP protocol, ignored for all other protocols.
+
+.PARAMETER PipeName
+    Write - String
+    Specifies the name of the named pipe. Only used for the Named Pipes protocol, ignored for all other protocols.
+
+.PARAMETER SuppressRestart
+    Write - Boolean
+    If set to $true then the any attempt by the resource to restart the service is suppressed. The default value is $false.
+
+.PARAMETER RestartTimeout
+    Write - UInt16
+    Timeout value for restarting the SQL Server services. The default value is 120 seconds.
+
+.PARAMETER HasMultiIPAddresses
+    Read - Boolean
+    Returns $true or $false whether the instance has multiple IP addresses or not.
+
+.EXAMPLE 1
+
+This example will enable the TCP/IP protocol, set the protocol to listen
+on all IP addresses, and set the keep alive duration.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            ProtocolName           = 'TcpIp'
+            Enabled                = $true
+            ListenOnAllIpAddresses = $false
+            KeepAlive              = 20000
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example will enable the Named Pipes protocol and set the name of the pipe.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName         = 'MSSQLSERVER'
+            ProtocolName         = 'NamedPipes'
+            Enabled              = $true
+            PipeName             = '\\.\pipe\$$\TESTCLU01A\MSSQL$SQL2014\sql\query'
+
+            PsDscRunAsCredential = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example will enable the Shared Memory protocol.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName         = 'MSSQLSERVER'
+            ProtocolName         = 'SharedMemory'
+            Enabled              = $true
+
+            PsDscRunAsCredential = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example will disable the TCP/IP protocol.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            ProtocolName           = 'TcpIp'
+            Enabled                = $false
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 5
+
+This example will disable the Named Pipes protocol.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            ProtocolName           = 'NamedPipes'
+            Enabled                = $false
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 6
+
+This example will disable the Shared Memory protocol.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'ChangeTcpIpOnDefaultInstance'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            ProtocolName           = 'SharedMemory'
+            Enabled                = $false
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+

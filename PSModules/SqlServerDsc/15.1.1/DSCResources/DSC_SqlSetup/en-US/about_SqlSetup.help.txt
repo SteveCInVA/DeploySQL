@@ -1,0 +1,1231 @@
+.NAME
+    SqlSetup
+
+.DESCRIPTION
+    The SqlSetup DSC resource installs SQL Server on the target node.
+
+    ## Requirements
+
+    - Target machine must be running Windows Server 2012 or later.
+    - For configurations that utilize the 'InstallFailoverCluster' action, the following
+      parameters are required (beyond those required for the standalone installation).
+      See the article https://docs.microsoft.com/en-us/sql/database-engine/install-windows/install-sql-server-from-the-command-prompt
+      under the section https://docs.microsoft.com/en-us/sql/database-engine/install-windows/install-sql-server-from-the-command-prompt#ClusterInstall
+      for more information.
+      - InstanceName (can be 'MSSQLSERVER' if you want to install a default
+        clustered instance).
+      - FailoverClusterNetworkName
+      - FailoverClusterIPAddress
+      - Additional parameters needed when installing Database Engine.
+        - InstallSQLDataDir
+        - AgtSvcAccount
+        - SQLSvcAccount
+        - SQLSysAdminAccounts
+      - Additional parameters needed when installing Analysis Services.
+        - ASSysAdminAccounts
+        - AsSvcAccount
+    - These parameters cannot be used for configurations that utilize the
+      'InstallFailoverCluster' action:
+      - BrowserSvcStartupType
+    - The parameters below can only be used when installing SQL Server 2016 or
+      later:
+      - SqlTempDbFileCount
+      - SqlTempDbFileSize
+      - SqlTempDbFileGrowth
+      - SqlTempDbLogFileSize
+      - SqlTempDbLogFileGrowth
+    - When installing SQL Server Analysis Services the account used to start
+      the service must have the correct permissions in directory tree for the
+      data folders. If not the service can fail with an access denied error.
+      For more information see the https://github.com/dsccommunity/SqlServerDsc/issues/1443.
+      To change permissions on folders the DSC resource https://github.com/dsccommunity/FileSystemDsc
+      can be used.
+    - On certain operating systems, when using least privilege for the service
+      account for the SQL Server Database Engine the security policy setting
+      https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/network-access-restrict-clients-allowed-to-make-remote-sam-calls
+      can result in an access denied when validating accounts in the domain.
+      For more information see the https://github.com/dsccommunity/SqlServerDsc/issues/1559.
+
+    ## Features supported
+
+    This is a list of currently supported features. All features might not be
+    available on all versions of SQL Server.
+
+    - SQLENGINE
+    - REPLICATION
+    - DQ
+    - DQC
+    - BOL
+    - CONN
+    - BC
+    - SDK
+    - MDS
+    - FULLTEXT
+    - RS
+    - AS
+    - IS
+    - SSMS
+    - ADV_SSMS
+
+    > Note: It is not possible to add or remove features to a SQL Server failover
+    >cluster. This is a limitation of SQL Server. See article
+    >https://support.microsoft.com/en-us/help/2547273/you-cannot-add-or-remove-features-to-a-sql-server-2008,-sql-server-2008-r2,-or-sql-server-2012-failover-cluster.
+
+    ## Skip rules
+
+    The parameter SkipRule accept one or more skip rules with will be passed
+    to setup.exe. Using the parameter SkipRule is not recommended in a
+    production environment unless there is a valid reason for it.
+
+    For more information about skip rules see the article https://deep.data.blog/2014/04/02/sql-2012-setup-rules-the-missing-reference/.
+
+    ## Credentials for running the resource
+
+    ### PsDscRunAsCredential
+
+    If PsDscRunAsCredential is set, the installation will be performed with those
+    credentials, and the user name will be used as the first system administrator.
+
+    ### SYSTEM
+
+    If PsDscRunAsCredential is not assigned credentials then installation will be
+    performed by the SYSTEM account. When installing as the SYSTEM account, then
+    parameter SQLSysAdminAccounts and ASSysAdminAccounts must be specified when
+    installing feature Database Engine and Analysis Services respectively.
+
+    ## Credentials for service accounts
+
+    ### Service Accounts
+
+    Service account username containing dollar sign ('$') is allowed, but if the
+    dollar sign is at the end of the username it will be considered a Managed Service
+    Account.
+
+    ### Managed Service Accounts
+
+    If a service account username has a dollar sign at the end of the name it will
+    be considered a Managed Service Account. Any password passed in
+    the credential object will be ignored, meaning the account is not expected to
+    need a '*SVCPASSWORD' argument in the setup arguments.
+
+    ## Note about 'tempdb' properties
+
+    The properties SqlTempDbFileSize and SqlTempDbFileGrowth that are
+    returned from Get-TargetResource will return the sum of the average size
+    and growth. If tempdb has data files with both percentage and megabytes the
+    value returned is a sum of the average megabytes and the average percentage.
+    For example is there is one data file using growth 100MB and another file
+    having growth set to 10% then the returned value would be 110.
+    This will be notable if there are multiple files in the filegroup PRIMARY
+    with different sizes and growths.
+
+    ## Considerations for the parameter SourceCredential
+
+    Using the parameter SourceCredential will trigger a copy of the installation
+    media to a temp folder on the target node. Setup will then be started from
+    the temp folder on the target node. For any subsequent calls to the resource,
+    the parameter SourceCredential is used to evaluate what major version the
+    file 'setup.exe' has in the path set, again, by the parameter SourcePath.
+    To know how the temp folder is evaluated please read the online documentation
+    for https://msdn.microsoft.com/en-us/library/system.io.path.gettemppath(v=vs.110.aspx).
+    If the path, that is assigned to parameter SourcePath, contains a leaf folder,
+    for example '\server\share\folder', then that leaf folder will be used as the
+    name of the temporary folder. If the path, that is assigned to parameter
+    SourcePath, does not have a leaf folder, for example '\server\share', then
+    a unique GUID will be used as the name of the temporary folder.
+
+    ## Feature flags
+
+    Not to be mistaken with the Features parameter.
+
+    Feature flags are used to toggle resource functionality on or off. One or
+    more feature flags can be added to the parameter FeatureFlag, i.e.
+    FeatureFlag = @('DetectionSharedFeatures').
+
+    >Note: The functionality, exposed with a feature flag, can be changed
+    >from one release to another, including having breaking changes.
+
+    <!-- markdownlint-disable MD013 -->
+    Flag | Description
+    --- | ---
+    \- | -
+    <!-- markdownlint-enable MD013 -->
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlSetup.
+
+.PARAMETER Action
+    Write - String
+    Allowed values: Install, Upgrade, InstallFailoverCluster, AddNode, PrepareFailoverCluster, CompleteFailoverCluster
+    The action to be performed. Default value is 'Install'. NOTE: AddNode is not currently functional.
+
+.PARAMETER SourcePath
+    Write - String
+    The path to the root of the source files for installation. I.e and UNC path to a shared resource. Environment variables can be used in the path.
+
+.PARAMETER SourceCredential
+    Write - Instance
+    Credentials used to access the path set in the parameter SourcePath. See section #considerations regarding the parameter SourceCredential.
+
+.PARAMETER SuppressReboot
+    Write - Boolean
+    Suppresses reboot.
+
+.PARAMETER ForceReboot
+    Write - Boolean
+    Forces reboot.
+
+.PARAMETER Features
+    Write - String
+    SQL Server features to be installed.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the name of the instance to be installed.
+
+.PARAMETER InstanceID
+    Write - String
+    SQL Server instance ID (if different from parameter InstanceName).
+
+.PARAMETER ProductKey
+    Write - String
+    Product key for licensed installations.
+
+.PARAMETER UpdateEnabled
+    Write - String
+    Enabled updates during installation.
+
+.PARAMETER UpdateSource
+    Write - String
+    Path to the source of updates to be applied during installation.
+
+.PARAMETER SQMReporting
+    Write - String
+    Enable customer experience reporting.
+
+.PARAMETER ErrorReporting
+    Write - String
+    Enable error reporting.
+
+.PARAMETER InstallSharedDir
+    Write - String
+    Installation path for shared SQL Server files.
+
+.PARAMETER InstallSharedWOWDir
+    Write - String
+    Installation path for x86 shared SQL Server files.
+
+.PARAMETER InstanceDir
+    Write - String
+    Installation path for SQL Server instance files.
+
+.PARAMETER SQLSvcAccount
+    Write - Instance
+    Service account for the SQL Server's Windows service.
+
+.PARAMETER SQLSvcAccountUsername
+    Read - String
+    Returns the username for the SQL Server's Windows service.
+
+.PARAMETER AgtSvcAccount
+    Write - Instance
+    Service account for the SQL Agent's Windows service.
+
+.PARAMETER AgtSvcAccountUsername
+    Read - String
+    Returns the username for the SQL Agent's Windows service.
+
+.PARAMETER SQLCollation
+    Write - String
+    Collation for SQL Server Database Engine.
+
+.PARAMETER SQLSysAdminAccounts
+    Write - StringArray
+    An array of accounts to be made SQL Server administrators.
+
+.PARAMETER SecurityMode
+    Write - String
+    Allowed values: SQL, Windows
+    Security mode to apply to the SQL Server instance. The value 'SQL' indicates mixed-mode authentication while the value 'Windows' indicates Windows Authentication. Default value is 'Windows'.
+
+.PARAMETER SAPwd
+    Write - Instance
+    Specifies the SA account's password. Only applicable if parameter SecurityMode is set to 'SQL'.
+
+.PARAMETER InstallSQLDataDir
+    Write - String
+    Root path for SQL Server database files.
+
+.PARAMETER SQLUserDBDir
+    Write - String
+    Path for SQL Server database files.
+
+.PARAMETER SQLUserDBLogDir
+    Write - String
+    Path for SQL Server log files.
+
+.PARAMETER SQLTempDBDir
+    Write - String
+    Path for SQL Server temporary database data files.
+
+.PARAMETER SQLTempDBLogDir
+    Write - String
+    Path for SQL Server temporary database log files.
+
+.PARAMETER SQLBackupDir
+    Write - String
+    Path for SQL Server backup files.
+
+.PARAMETER FTSvcAccount
+    Write - Instance
+    Service account for the Full Text's Windows service.
+
+.PARAMETER FTSvcAccountUsername
+    Read - String
+    Returns the username for the Full Text' Windows service.
+
+.PARAMETER RSSvcAccount
+    Write - Instance
+    Service account for Reporting Services's Windows service.
+
+.PARAMETER RSSvcAccountUsername
+    Read - String
+    Returns the username for the Reporting Services's Windows service.
+
+.PARAMETER RSInstallMode
+    Write - String
+    Allowed values: SharePointFilesOnlyMode, DefaultNativeMode, FilesOnlyMode
+    Specifies the install mode for SQL Server Report Services service.
+
+.PARAMETER ASSvcAccount
+    Write - Instance
+    Service account for Analysis Services's Windows service.
+
+.PARAMETER ASSvcAccountUsername
+    Read - String
+    Returns the username for the SQL Server Analysis Services's Windows service.
+
+.PARAMETER ASCollation
+    Write - String
+    Collation for the SQL Server Analysis Services.
+
+.PARAMETER ASSysAdminAccounts
+    Write - StringArray
+    Array of accounts to be made Analysis Services admins.
+
+.PARAMETER ASDataDir
+    Write - String
+    Path for Analysis Services's data files.
+
+.PARAMETER ASLogDir
+    Write - String
+    Path for Analysis Services's log files.
+
+.PARAMETER ASBackupDir
+    Write - String
+    Path for Analysis Services's backup files.
+
+.PARAMETER ASTempDir
+    Write - String
+    Path for Analysis Services's temp files.
+
+.PARAMETER ASConfigDir
+    Write - String
+    Path for Analysis Services's config files.
+
+.PARAMETER ASServerMode
+    Write - String
+    Allowed values: MULTIDIMENSIONAL, TABULAR, POWERPIVOT
+    The server mode for SQL Server Analysis Services instance. The default is to install in Multidimensional mode. Valid values in a cluster scenario are 'MULTIDIMENSIONAL' or 'TABULAR'. Parameter ASServerMode is case-sensitive. All values must be expressed in upper case.
+
+.PARAMETER ISSvcAccount
+    Write - Instance
+    Service account for Integration Services's Windows service.
+
+.PARAMETER ISSvcAccountUsername
+    Read - String
+    Returns the username for the Integration Services's Windows service.
+
+.PARAMETER SqlSvcStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for the SQL Server Database Engine's Windows service.
+
+.PARAMETER AgtSvcStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for the SQL Server Agent's Windows service.
+
+.PARAMETER IsSvcStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for the SQL Server Integration Services's Windows service.
+
+.PARAMETER AsSvcStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for the SQL Server Analysis Services's Windows service.
+
+.PARAMETER RSSVCStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for the SQL Server Reporting Services's Windows service.
+
+.PARAMETER BrowserSvcStartupType
+    Write - String
+    Allowed values: Automatic, Disabled, Manual
+    Specifies the startup mode for SQL Server Browser's Windows service.
+
+.PARAMETER FailoverClusterGroupName
+    Write - String
+    The name of the resource group to create for the clustered SQL Server instance. Default is 'SQL Server (InstanceName)'.
+
+.PARAMETER FailoverClusterIPAddress
+    Write - StringArray
+    Specifies an array of IP addresses to be assigned to the clustered SQL Server instance. IP addresses must be in https://en.wikipedia.org/wiki/Dot-decimal_notation, for example '10.0.0.100'. If no IP address is specified, uses 'DEFAULT' for this setup parameter.
+
+.PARAMETER FailoverClusterNetworkName
+    Write - String
+    Host name to be assigned to the clustered SQL Server instance.
+
+.PARAMETER SqlTempdbFileCount
+    Write - UInt32
+    Specifies the number of temporary database data files to be added by setup.
+
+.PARAMETER SqlTempdbFileSize
+    Write - UInt32
+    Specifies the initial size of each temporary database data file in MB.
+
+.PARAMETER SqlTempdbFileGrowth
+    Write - UInt32
+    Specifies the file growth increment of each temporary database data file in MB.
+
+.PARAMETER SqlTempdbLogFileSize
+    Write - UInt32
+    Specifies the initial size of each temporary database log file in MB.
+
+.PARAMETER SqlTempdbLogFileGrowth
+    Write - UInt32
+    Specifies the file growth increment of each temporary database data file in MB.
+
+.PARAMETER NpEnabled
+    Write - Boolean
+    Specifies the state of the Named Pipes protocol for the SQL Server service. The value $true will enable the Named Pipes protocol and $false will disabled it.
+
+.PARAMETER TcpEnabled
+    Write - Boolean
+    Specifies the state of the TCP protocol for the SQL Server service. The value $true will enable the TCP protocol and $false will disabled it.
+
+.PARAMETER SetupProcessTimeout
+    Write - UInt32
+    The timeout, in seconds, to wait for the setup process to finish. Default value is 7200 seconds (2 hours). If the setup process does not finish before this time, an error will be thrown.
+
+.PARAMETER FeatureFlag
+    Write - StringArray
+    Feature flags are used to toggle DSC resource functionality on or off. See the DSC resource documentation for what additional functionality exist through a feature flag.
+
+.PARAMETER UseEnglish
+    Write - Boolean
+    Specifies to install the English version of SQL Server on a localized operating system when the installation media includes language packs for both English and the language corresponding to the operating system.
+
+.PARAMETER SkipRule
+    Write - StringArray
+    Specifies optional skip rules during setup.
+
+.PARAMETER IsClustered
+    Read - Boolean
+    Returns a boolean value of $true if the instance is clustered, otherwise it returns $false.
+
+.EXAMPLE 1
+
+This example shows how to install a default instance of SQL Server, and
+Analysis Services in Tabular mode, on a single server.
+
+.NOTES
+SQL Server setup is run using the SYSTEM account. Even if SetupCredential is provided
+it is not used to install SQL Server at this time (see issue #139).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server
+        SqlSetup 'InstallDefaultInstance'
+        {
+            InstanceName         = 'MSSQLSERVER'
+            Features             = 'SQLENGINE,AS'
+            SQLCollation         = 'SQL_Latin1_General_CP1_CI_AS'
+            SQLSvcAccount        = $SqlServiceCredential
+            AgtSvcAccount        = $SqlAgentServiceCredential
+            ASSvcAccount         = $SqlServiceCredential
+            SQLSysAdminAccounts  = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSysAdminAccounts   = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            InstallSharedDir     = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir  = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir          = 'C:\Program Files\Microsoft SQL Server'
+            InstallSQLDataDir    = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLUserDBDir         = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLUserDBLogDir      = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLTempDBDir         = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLTempDBLogDir      = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLBackupDir         = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Backup'
+            ASServerMode         = 'TABULAR'
+            ASConfigDir          = 'C:\MSOLAP\Config'
+            ASDataDir            = 'C:\MSOLAP\Data'
+            ASLogDir             = 'C:\MSOLAP\Log'
+            ASBackupDir          = 'C:\MSOLAP\Backup'
+            ASTempDir            = 'C:\MSOLAP\Temp'
+            SourcePath           = 'C:\InstallMedia\SQL2016RTM'
+            NpEnabled            = $true
+            TcpEnabled           = $true
+            UpdateEnabled        = 'False'
+            UseEnglish           = $true
+            ForceReboot          = $false
+
+            PsDscRunAsCredential = $SqlInstallCredential
+
+            DependsOn            = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #endregion Install SQL Server
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to install a named instance of SQL Server on a single server.
+
+.NOTES
+SQL Server setup is run using the SYSTEM account. Even if SetupCredential is provided
+it is not used to install SQL Server at this time (see issue #139).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server
+        SqlSetup 'InstallNamedInstance-INST2016'
+        {
+            InstanceName          = 'INST2016'
+            Features              = 'SQLENGINE,AS'
+            SQLCollation          = 'SQL_Latin1_General_CP1_CI_AS'
+            SQLSvcAccount         = $SqlServiceCredential
+            AgtSvcAccount         = $SqlAgentServiceCredential
+            ASSvcAccount          = $SqlServiceCredential
+            SQLSysAdminAccounts   = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSysAdminAccounts    = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir           = 'C:\Program Files\Microsoft SQL Server'
+            InstallSQLDataDir     = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLBackupDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Backup'
+            ASConfigDir           = 'C:\MSOLAP13.INST2016\Config'
+            ASDataDir             = 'C:\MSOLAP13.INST2016\Data'
+            ASLogDir              = 'C:\MSOLAP13.INST2016\Log'
+            ASBackupDir           = 'C:\MSOLAP13.INST2016\Backup'
+            ASTempDir             = 'C:\MSOLAP13.INST2016\Temp'
+            SourcePath            = 'C:\InstallMedia\SQL2016RTM'
+            UpdateEnabled         = 'False'
+            ForceReboot           = $false
+            BrowserSvcStartupType = 'Automatic'
+
+            PsDscRunAsCredential  = $SqlInstallCredential
+
+            DependsOn             = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #endregion Install SQL Server
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to install a named instance of SQL Server on a single server, from an UNC path.
+
+.NOTES
+Assumes the credentials assigned to SourceCredential have read permission on the share and on the UNC path.
+The media will be copied locally, using impersonation with the credentials provided in SourceCredential, so
+that the SYSTEM account can access the media locally.
+
+SQL Server setup is run using the SYSTEM account. Even if SetupCredential is provided
+it is not used to install SQL Server at this time (see issue #139).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server
+        SqlSetup 'InstallNamedInstance-INST2016'
+        {
+            InstanceName          = 'INST2016'
+            Features              = 'SQLENGINE,AS'
+            SQLCollation          = 'SQL_Latin1_General_CP1_CI_AS'
+            SQLSvcAccount         = $SqlServiceCredential
+            AgtSvcAccount         = $SqlAgentServiceCredential
+            ASSvcAccount          = $SqlServiceCredential
+            SQLSysAdminAccounts   = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSysAdminAccounts    = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir           = 'C:\Program Files\Microsoft SQL Server'
+            InstallSQLDataDir     = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLBackupDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Backup'
+            ASConfigDir           = 'C:\MSOLAP13.INST2016\Config'
+            ASDataDir             = 'C:\MSOLAP13.INST2016\Data'
+            ASLogDir              = 'C:\MSOLAP13.INST2016\Log'
+            ASBackupDir           = 'C:\MSOLAP13.INST2016\Backup'
+            ASTempDir             = 'C:\MSOLAP13.INST2016\Temp'
+            SourcePath            = '\\fileserver.company.local\images$\SQL2016RTM'
+            SourceCredential      = $SqlInstallCredential
+            UpdateEnabled         = 'False'
+            ForceReboot           = $false
+            BrowserSvcStartupType = 'Automatic'
+
+            PsDscRunAsCredential  = $SqlInstallCredential
+
+            DependsOn             = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #endregion Install SQL Server
+    }
+}
+
+.EXAMPLE 4
+
+This example shows how to install the first node in a SQL Server failover cluster.
+
+.NOTES
+This example assumes that a Failover Cluster is already present with a Cluster Name Object (CNO), IP-address.
+This example also assumes that that all necessary shared disks is present, and formatted with the correct
+drive letter, to accommodate the paths used during SQL Server setup. Minimum is one shared disk.
+This example also assumes that the Cluster Name Object (CNO) has the permission to manage Computer Objects in
+the Organizational Unit (OU) where the CNO Computer Object resides in Active Directory. This is necessary
+so that SQL Server setup can create a Virtual Computer Object (VCO) for the cluster group
+(Windows Server 2012 R2 and earlier) or cluster role (Windows Server 2016 and later). Also so that the
+Virtual Computer Object (VCO) can be removed when the Failover CLuster instance is uninstalled.
+
+See the DSC resources xFailoverCluster, StorageDsc and iSCSIDsc for information how to setup a failover cluster
+with DSC.
+
+The resource is run using the SYSTEM account, but the setup is run using impersonation, with the credentials in
+SetupCredential, when Action is 'InstallFailoverCluster'.
+
+Assumes the credentials assigned to SourceCredential have read permission on the share and on the UNC path.
+The media will be copied locally, using impersonation with the credentials provided in SourceCredential, so
+that the impersonated credentials in SetupCredential can access the media locally.
+
+There is currently a bug that prevents the resource to logon to the instance if the current node is not the
+active node. This is because the resource tries to logon using the SYSTEM account instead of the credentials
+in SetupCredential, and the resource does not currently support the built-in PsDscRunAsCredential either (see
+issue #444).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server Failover Cluster
+        SqlSetup 'InstallNamedInstanceNode1-INST2016'
+        {
+            Action                     = 'InstallFailoverCluster'
+            ForceReboot                = $false
+            UpdateEnabled              = 'False'
+            SourcePath                 = '\\fileserver.company.local\images$\SQL2016RTM'
+            SourceCredential           = $SqlInstallCredential
+
+            InstanceName               = 'INST2016'
+            Features                   = 'SQLENGINE,AS'
+
+            InstallSharedDir           = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir        = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir                = 'C:\Program Files\Microsoft SQL Server'
+
+            SQLCollation               = 'Finnish_Swedish_CI_AS'
+            SQLSvcAccount              = $SqlServiceCredential
+            AgtSvcAccount              = $SqlAgentServiceCredential
+            SQLSysAdminAccounts        = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSvcAccount               = $SqlServiceCredential
+            ASSysAdminAccounts         = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+
+            # Drive D: must be a shared disk.
+            InstallSQLDataDir          = 'D:\MSSQL\Data'
+            SQLUserDBDir               = 'D:\MSSQL\Data'
+            SQLUserDBLogDir            = 'D:\MSSQL\Log'
+            SQLTempDBDir               = 'D:\MSSQL\Temp'
+            SQLTempDBLogDir            = 'D:\MSSQL\Temp'
+            SQLBackupDir               = 'D:\MSSQL\Backup'
+            ASConfigDir                = 'D:\AS\Config'
+            ASDataDir                  = 'D:\AS\Data'
+            ASLogDir                   = 'D:\AS\Log'
+            ASBackupDir                = 'D:\AS\Backup'
+            ASTempDir                  = 'D:\AS\Temp'
+
+            FailoverClusterNetworkName = 'TESTCLU01A'
+            FailoverClusterIPAddress   = '192.168.0.46'
+            FailoverClusterGroupName   = 'TESTCLU01A'
+
+            PsDscRunAsCredential       = $SqlInstallCredential
+
+            DependsOn                  = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #region Install SQL Server Failover Cluster
+    }
+}
+
+.EXAMPLE 5
+
+This example shows how to add a node to an existing SQL Server failover cluster.
+
+.NOTES
+This example assumes that a Failover Cluster is already present with the first SQL Server Failover Cluster
+node already installed.
+This example also assumes that that the same shared disks on the first node is also present on this second
+node.
+
+See the example 4-InstallNamedInstanceInFailoverClusterFirstNode.ps1 for information how to setup the first
+SQL Server Failover Cluster node.
+
+The resource is run using the SYSTEM account, but the setup is run using impersonation, with the credentials in
+SetupCredential, when Action is 'Addnode'.
+
+Assumes the credentials assigned to SourceCredential have read permission on the share and on the UNC path.
+The media will be copied locally, using impersonation with the credentials provided in SourceCredential, so
+that the impersonated credentials in SetupCredential can access the media locally.
+
+Setup cannot be run using PsDscRunAsCredential at this time (see issue #405 and issue #444). That
+also means that at this time PsDscRunAsCredential can not be used to access media on the UNC share.
+
+There is currently a bug that prevents the resource to logon to the instance if the current node is not the
+active node. This is because the resource tries to logon using the SYSTEM account instead of the credentials
+in SetupCredential, and the resource does not currently support the built-in PsDscRunAsCredential either (see
+issue #444).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server Failover Cluster
+        SqlSetup 'InstallNamedInstanceNode2-INST2016'
+        {
+            Action                     = 'AddNode'
+            ForceReboot                = $false
+            UpdateEnabled              = 'False'
+            SourcePath                 = '\\fileserver.company.local\images$\SQL2016RTM'
+            SourceCredential           = $SqlInstallCredential
+
+            InstanceName               = 'INST2016'
+            Features                   = 'SQLENGINE,AS'
+
+            SQLSvcAccount              = $SqlServiceCredential
+            AgtSvcAccount              = $SqlAgentServiceCredential
+            ASSvcAccount               = $SqlServiceCredential
+
+            FailoverClusterNetworkName = 'TESTCLU01A'
+
+            PsDscRunAsCredential       = $SqlInstallCredential
+
+            DependsOn                  = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #region Install SQL Server Failover Cluster
+    }
+}
+
+.EXAMPLE 6
+
+This example shows how to install a named instance of SQL Server on a single server.
+
+.NOTES
+SQL Server setup is run using the SYSTEM account. Even if SetupCredential is provided
+it is not used to install SQL Server at this time (see issue #139).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server
+        SqlSetup 'InstallNamedInstance-INST2016'
+        {
+            InstanceName          = 'INST2016'
+            Features              = 'SQLENGINE,AS'
+            SQLCollation          = 'SQL_Latin1_General_CP1_CI_AS'
+            SQLSvcAccount         = $SqlServiceCredential
+            AgtSvcAccount         = $SqlAgentServiceCredential
+            ASSvcAccount          = $SqlServiceCredential
+            SQLSysAdminAccounts   = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSysAdminAccounts    = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir           = 'C:\Program Files\Microsoft SQL Server'
+            InstallSQLDataDir     = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLUserDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLTempDBLogDir       = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Data'
+            SQLBackupDir          = 'C:\Program Files\Microsoft SQL Server\MSSQL13.INST2016\MSSQL\Backup'
+            ASConfigDir           = 'C:\MSOLAP13.INST2016\Config'
+            ASDataDir             = 'C:\MSOLAP13.INST2016\Data'
+            ASLogDir              = 'C:\MSOLAP13.INST2016\Log'
+            ASBackupDir           = 'C:\MSOLAP13.INST2016\Backup'
+            ASTempDir             = 'C:\MSOLAP13.INST2016\Temp'
+            SourcePath            = 'C:\InstallMedia\SQL2016RTM'
+            UpdateEnabled         = 'False'
+            ForceReboot           = $false
+
+            SqlSvcStartupType     = 'Automatic'
+            AgtSvcStartupType     = 'Disabled'
+            AsSvcStartupType      = 'Automatic'
+            BrowserSvcStartupType = 'Automatic'
+
+            PsDscRunAsCredential  = $SqlInstallCredential
+
+            DependsOn             = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #endregion Install SQL Server
+    }
+}
+
+.EXAMPLE 7
+
+This example shows how to install a default instance of SQL Server, and
+Analysis Services in Tabular mode, on a single server.
+It contains configurations that apply to Sql Server 2016 or later only.
+
+.NOTES
+SQL Server setup is run using the SYSTEM account. Even if SetupCredential is provided
+it is not used to install SQL Server at this time (see issue #139).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server
+        SqlSetup 'InstallDefaultInstance'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            Features               = 'SQLENGINE,AS'
+            SQLCollation           = 'SQL_Latin1_General_CP1_CI_AS'
+            SQLSvcAccount          = $SqlServiceCredential
+            AgtSvcAccount          = $SqlAgentServiceCredential
+            ASSvcAccount           = $SqlServiceCredential
+            SQLSysAdminAccounts    = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            ASSysAdminAccounts     = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+            InstallSharedDir       = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir    = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir            = 'C:\Program Files\Microsoft SQL Server'
+            InstallSQLDataDir      = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLUserDBDir           = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLUserDBLogDir        = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLTempDBDir           = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLTempDBLogDir        = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Data'
+            SQLBackupDir           = 'C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Backup'
+            ASServerMode           = 'TABULAR'
+            ASConfigDir            = 'C:\MSOLAP\Config'
+            ASDataDir              = 'C:\MSOLAP\Data'
+            ASLogDir               = 'C:\MSOLAP\Log'
+            ASBackupDir            = 'C:\MSOLAP\Backup'
+            ASTempDir              = 'C:\MSOLAP\Temp'
+            SourcePath             = 'C:\InstallMedia\SQL2016RTM'
+            UpdateEnabled          = 'False'
+            ForceReboot            = $false
+            SqlTempdbFileCount     = 4
+            SqlTempdbFileSize      = 1024
+            SqlTempdbFileGrowth    = 512
+            SqlTempdbLogFileSize   = 128
+            SqlTempdbLogFileGrowth = 64
+
+            PsDscRunAsCredential = $SqlInstallCredential
+
+            DependsOn            = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #endregion Install SQL Server
+    }
+}
+
+.EXAMPLE 8
+
+This example shows how to ad skip rules to setup.exe.
+
+.NOTES
+Using skip rules is not recommended in a production environment.
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential = $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential = $SqlServiceCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        #region Install prerequisites for SQL Server
+        WindowsFeature 'NetFramework35'
+        {
+            Name   = 'NET-Framework-Core'
+            Source = '\\fileserver.company.local\images$\Win2k12R2\Sources\Sxs' # Assumes built-in Everyone has read permission to the share and path.
+            Ensure = 'Present'
+        }
+
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+        #endregion Install prerequisites for SQL Server
+
+        #region Install SQL Server Failover Cluster
+        SqlSetup 'InstallNamedInstanceNode1-INST2016'
+        {
+            Action                     = 'InstallFailoverCluster'
+            ForceReboot                = $false
+            UpdateEnabled              = 'False'
+            SourcePath                 = '\\fileserver.company.local\images$\SQL2016RTM'
+            SourceCredential           = $SqlInstallCredential
+
+            InstanceName               = 'INST2016'
+            Features                   = 'SQLENGINE'
+
+            InstallSharedDir           = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir        = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir                = 'C:\Program Files\Microsoft SQL Server'
+
+            SQLCollation               = 'Finnish_Swedish_CI_AS'
+            SQLSvcAccount              = $SqlServiceCredential
+            AgtSvcAccount              = $SqlAgentServiceCredential
+            SQLSysAdminAccounts        = 'COMPANY\SQL Administrators', $SqlAdministratorCredential.UserName
+
+            # Drive D: must be a shared disk.
+            InstallSQLDataDir          = 'D:\MSSQL\Data'
+            SQLUserDBDir               = 'D:\MSSQL\Data'
+            SQLUserDBLogDir            = 'D:\MSSQL\Log'
+            SQLTempDBDir               = 'D:\MSSQL\Temp'
+            SQLTempDBLogDir            = 'D:\MSSQL\Temp'
+            SQLBackupDir               = 'D:\MSSQL\Backup'
+
+            FailoverClusterNetworkName = 'TESTCLU01A'
+            FailoverClusterIPAddress   = '192.168.0.46'
+            FailoverClusterGroupName   = 'TESTCLU01A'
+
+            # Not recommended to use in production.
+            SkipRule                   = 'Cluster_VerifyForErrors'
+
+            PsDscRunAsCredential       = $SqlInstallCredential
+
+            DependsOn                  = '[WindowsFeature]NetFramework35', '[WindowsFeature]NetFramework45'
+        }
+        #region Install SQL Server Failover Cluster
+    }
+}
+

@@ -1,0 +1,254 @@
+.NAME
+    SqlDatabaseUser
+
+.DESCRIPTION
+    The SqlDatabaseUser DSC resource is used to create database users.
+    A database user can be created with or without a login, and a database
+    user can be mapped to a certificate or asymmetric key. The resource also
+    allows re-mapping of the SQL login.
+
+    > Note: This resource does not yet support https://docs.microsoft.com/en-us/sql/relational-databases/databases/contained-databases.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabaseUser.
+
+.PARAMETER Name
+    Key - String
+    Specifies the name of the database user to be added or removed.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the SQL Server instance in which the database exist.
+
+.PARAMETER DatabaseName
+    Key - String
+    Specifies the name of the database in which to configure the database user.
+
+.PARAMETER ServerName
+    Write - String
+    Specifies the host name of the SQL Server on which the instance exist. Default value is the current computer name.
+
+.PARAMETER LoginName
+    Write - String
+    Specifies the name of the login to associate with the database user. This must be specified if parameter UserType is set to 'Login'.
+
+.PARAMETER AsymmetricKeyName
+    Write - String
+    Specifies the name of the asymmetric key to associate with the database user. This must be specified if parameter UserType is set to 'AsymmetricKey'.
+
+.PARAMETER CertificateName
+    Write - String
+    Specifies the name of the certificate to associate with the database user. This must be specified if parameter UserType is set to 'Certificate'.
+
+.PARAMETER UserType
+    Write - String
+    Allowed values: Login, NoLogin, Certificate, AsymmetricKey
+    Specifies the type of the database user. Default value is 'NoLogin'.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies if the database user should be present or absent. If 'Present' then the database user will be added to the database and, if needed, the login mapping will be updated. If 'Absent' then the database user will be removed from the database. Default value is 'Present'.
+
+.PARAMETER Force
+    Write - Boolean
+    Specifies if it is allowed to re-create the database user if either the user type, the asymmetric key, or the certificate changes. Default value is $false not allowing database users to be re-created.
+
+.PARAMETER AuthenticationType
+    Read - String
+    Returns the authentication type of the login connected to the database user. This will return either 'Windows', 'Instance', or 'None'. The value 'Windows' means the login is using Windows Authentication, 'Instance' means that the login is using SQL Authentication, and 'None' means that the database user have no login connected to it.
+
+.PARAMETER LoginType
+    Read - String
+    Returns the login type of the login connected to the database user. If no login is connected to the database user this returns $null.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the database users ReportAdmin,
+CONTOSO\ReportEditors, and CONTOSO\ReportViewers are present in the
+AdventureWorks database in the instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseUser 'ReportAdmin_AddUser'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'ReportAdmin'
+            UserType             = 'Login'
+            LoginName            = 'ReportAdmin'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabaseUser 'ContosoReportEditor_AddUser'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'CONTOSO\ReportEditor'
+            UserType             = 'Login'
+            LoginName            = 'CONTOSO\ReportEditor'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabaseUser 'ContosoReportViewer_AddUser'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'CONTOSO\ReportViewer'
+            UserType             = 'Login'
+            LoginName            = 'CONTOSO\ReportViewer'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the database user User1 are present
+in the AdventureWorks database in the instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseUser 'AddUser1'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'User1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to ensure that the database user User1 are
+mapped to the asymmetric key Key1 in the AdventureWorks database in
+the instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseUser 'ReportAdmin_AddUser'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'ReportAdmin'
+            UserType             = 'AsymmetricKey'
+            AsymmetricKeyName    = 'Key1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example shows how to ensure that the database user User1 are
+mapped to the certificate Certificate1 in the AdventureWorks database in
+the instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseUser 'ReportAdmin_AddUser'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'ReportAdmin'
+            UserType             = 'Certificate'
+            CertificateName      = 'Certificate1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 5
+
+This example shows how to ensure that the database user CONTOSO\ReportViewers
+is absent from the AdventureWorks database in the instance sqltest.company.local\DSC.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseUser 'ContosoReportViewer_RemoveUser'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            DatabaseName         = 'AdventureWorks'
+            Name                 = 'CONTOSO\ReportViewer'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

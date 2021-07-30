@@ -1,0 +1,166 @@
+.NAME
+    SqlDatabaseMail
+
+.DESCRIPTION
+    The SqlDatabaseMail DSC resource manages SQL Server Database Mail.
+
+    >Note: Database Mail XPs can be enabled using the resource SqlConfiguration.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Target machine must be running SQL Server Agent.
+    * Target machine must have enabled Database Mail XPs.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabaseMail.
+
+.PARAMETER AccountName
+    Key - String
+    The name of the Database Mail account.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER EmailAddress
+    Required - String
+    The e-mail address from which mail will originate.
+
+.PARAMETER MailServerName
+    Required - String
+    The fully qualified domain name (FQDN) of the mail server name to which e-mail are sent.
+
+.PARAMETER ProfileName
+    Required - String
+    The name of the Database Mail profile.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies the desired state of the Database Mail account. When set to 'Present' the Database Mail account will be created. When set to 'Absent' the Database Mail account will be removed. Default value is 'Present'.
+
+.PARAMETER ServerName
+    Write - String
+    The hostname of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER DisplayName
+    Write - String
+    The display name of the originating email address. Default value is the same value assigned to the parameter EmailAddress.
+
+.PARAMETER ReplyToAddress
+    Write - String
+    The e-mail address to which the receiver of e-mails will reply to. Default value is the same e-mail address assigned to parameter EmailAddress.
+
+.PARAMETER Description
+    Write - String
+    The description for the Database Mail profile and account.
+
+.PARAMETER LoggingLevel
+    Write - String
+    Allowed values: Normal, Extended, Verbose
+    The logging level that the Database Mail will use. If not specified the default logging level is 'Extended'.
+
+.PARAMETER TcpPort
+    Write - UInt16
+    The TCP port used for communication. Default value is port 25.
+
+.EXAMPLE 1
+
+This example will enable Database Mail on a SQL Server instance and
+create a mail account with a default public profile.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlConfiguration 'EnableDatabaseMailXPs'
+        {
+
+            ServerName     = $Node.NodeName
+            InstanceName   = 'DSCSQLTEST'
+            OptionName     = 'Database Mail XPs'
+            OptionValue    = 1
+            RestartService = $false
+        }
+
+        SqlDatabaseMail 'EnableDatabaseMail'
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'DSCSQLTEST'
+            AccountName          = 'MyMail'
+            ProfileName          = 'MyMailProfile'
+            EmailAddress         = 'NoReply@company.local'
+            ReplyToAddress       = 'NoReply@company.local'
+            DisplayName          = 'mail.company.local'
+            MailServerName       = 'mail.company.local'
+            Description          = 'Default mail account and profile.'
+            LoggingLevel         = 'Normal'
+            TcpPort              = 25
+
+            PsDscRunAsCredential = $SqlInstallCredential
+        }
+    }
+}
+
+
+.EXAMPLE 2
+
+This example will remove the mail profile and the mail account and
+disable Database Mail on a SQL Server instance.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost {
+        SqlDatabaseMail 'DisableDatabaseMail'
+        {
+            Ensure               = 'Absent'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'DSCSQLTEST'
+            AccountName          = 'MyMail'
+            ProfileName          = 'MyMailProfile'
+            EmailAddress         = 'NoReply@company.local'
+            MailServerName       = 'mail.company.local'
+
+            PsDscRunAsCredential = $SqlInstallCredential
+        }
+
+        <#
+            Don't disable the Database Mail XPs if there are still mail accounts
+            left configured.
+        #>
+        SqlConfiguration 'DisableDatabaseMailXPs'
+        {
+
+            ServerName     = $Node.NodeName
+            InstanceName   = 'DSCSQLTEST'
+            OptionName     = 'Database Mail XPs'
+            OptionValue    = 0
+            RestartService = $false
+        }
+    }
+}
+

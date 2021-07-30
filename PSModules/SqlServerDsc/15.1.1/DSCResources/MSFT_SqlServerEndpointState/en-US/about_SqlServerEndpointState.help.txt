@@ -1,0 +1,28 @@
+.NAME
+    SqlServerEndpointState
+
+# DEPRECATION NOTICE
+
+    The SqlServerEndpointState DSC resource is DEPRECATED. The resource
+    is replaced by a property in the resource SqlServerEndpoint.
+
+    The documentation, examples, unit test, and integration tests have been
+    removed. This resource will be removed in a future release.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL instance to be configured.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is $env:COMPUTERNAME.
+
+.PARAMETER Name
+    Key - String
+    The name of the endpoint.
+
+.PARAMETER State
+    Write - String
+    Allowed values: Started, Stopped, Disabled
+    The state of the endpoint. Valid states are Started, Stopped or Disabled. Default value is 'Started'.
+

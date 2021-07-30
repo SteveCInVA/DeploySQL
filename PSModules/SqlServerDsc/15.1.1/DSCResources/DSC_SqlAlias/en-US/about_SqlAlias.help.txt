@@ -1,0 +1,137 @@
+.NAME
+    SqlAlias
+
+.DESCRIPTION
+    The SqlAlias DSC resource is used to configure SQL Server Aliases on the node.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAlias.
+
+.PARAMETER Name
+    Key - String
+    The name of Alias (e.g. 'svr01\inst01').
+
+.PARAMETER Protocol
+    Write - String
+    Allowed values: TCP, NP
+    Protocol to use when connecting. Valid values are 'TCP' (TCP/IP) or 'NP' (Named Pipes). Default value is 'TCP'.
+
+.PARAMETER ServerName
+    Write - String
+    The SQL Server you are aliasing. This should be set to the NetBIOS name or fully qualified domain name (FQDN).
+
+.PARAMETER TcpPort
+    Write - UInt16
+    The TCP port the SQL Server instance is listening on. Only used when Protocol is set to 'TCP'. Default value is port 1433.
+
+.PARAMETER UseDynamicTcpPort
+    Write - Boolean
+    Specifies that the Net-Library will determine the port dynamically. The port number specified in Port will be ignored. Default value is $false.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Determines whether the alias should be added ('Present') or removed ('Absent'). Default value is 'Present'.
+
+.PARAMETER PipeName
+    Read - String
+    Returns the Named Pipes path if Protocol is set to 'NP'.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the SQL Alias
+SQLDSC* exists with Named Pipes or TCP.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAlias 'Add_SqlAlias_TCP'
+        {
+            Ensure               = 'Present'
+            Name                 = 'SQLDSC-TCP'
+            ServerName           = 'sqltest.company.local\DSC'
+            Protocol             = 'TCP'
+            TcpPort              = 1777
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlias 'Add_SqlAlias_TCPUseDynamicTcpPort'
+        {
+            Ensure               = 'Present'
+            Name                 = 'SQLDSC-DYN'
+            ServerName           = 'sqltest.company.local\DSC'
+            Protocol             = 'TCP'
+            UseDynamicTcpPort    = $true
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlias 'Add_SqlAlias_NP'
+        {
+            Ensure               = 'Present'
+            Name                 = 'SQLDSC-NP'
+            ServerName           = '\\sqlnode\PIPE\sql\query'
+            Protocol             = 'NP'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the SQL Alias
+SQLDSC* does not exist with Named Pipes or TCP.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAlias 'Remove_SqlAlias_TCP'
+        {
+            Ensure               = 'Absent'
+            Name                 = 'SQLDSC-TCP'
+            ServerName           = 'sqltest.company.local\DSC'
+            Protocol             = 'TCP'
+            TcpPort              = 1777
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlias 'Remove_SqlAlias_NP'
+        {
+            Ensure               = 'Absent'
+            Name                 = 'SQLDSC-NP'
+            ServerName           = '\\sqlnode\PIPE\sql\query'
+            Protocol             = 'NP'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

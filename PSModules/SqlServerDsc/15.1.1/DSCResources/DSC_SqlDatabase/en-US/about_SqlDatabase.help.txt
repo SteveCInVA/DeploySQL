@@ -1,0 +1,174 @@
+.NAME
+    SqlDatabase
+
+.DESCRIPTION
+    The SqlDatabase DSC resource is used to create or delete a database.
+    For more information about SQL Server databases, please read the following
+    articles https://docs.microsoft.com/en-us/sql/relational-databases/databases/create-a-database
+    and https://docs.microsoft.com/en-us/sql/relational-databases/databases/delete-a-database.
+
+    This resource sets the recovery model for a database. The recovery model controls
+    how transactions are logged, whether the transaction log requires (and allows)
+    backing up, and what kinds of restore operations are available. Three recovery
+    models exist: full, simple, and bulk-logged. Read more about recovery model in
+    the article https://msdn.microsoft.com/en-us/library/ms189272.aspx.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Valid values per SQL Server version for the parameter CompatibilityLevel
+      can be found in the article https://docs.microsoft.com/en-us/sql/t-sql/statements/alter-database-transact-sql-compatibility-level.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabase.
+
+.PARAMETER Name
+    Key - String
+    The name of the SQL Server database.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    When set to 'Present', the database will be created. When set to 'Absent', the database will be dropped. Default value is 'Present'.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER Collation
+    Write - String
+    The name of the collation to use for the new database. Default value is the collation used by the server.
+
+.PARAMETER CompatibilityLevel
+    Write - String
+    Allowed values: Version80, Version90, Version100, Version110, Version120, Version130, Version140, Version150
+    Specifies the version of the SQL Database Compatibility Level to use for the specified database.
+
+.PARAMETER RecoveryModel
+    Write - String
+    Allowed values: Simple, Full, BulkLogged
+    The recovery model for the specified database.
+
+.PARAMETER OwnerName
+    Write - String
+    Specifies the name of the login that should be the owner of the database.
+
+.EXAMPLE 1
+
+This example shows how to create a database with
+the database name equal to 'Contoso'.
+
+The second example shows how to create a database
+with a different collation.
+
+The third example shows how to create a database
+with a different compatibility level.
+
+The fourth example shows how to create a database
+with a different recovery model.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabase 'Create_Database'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'Contoso'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabase 'Create_Database_with_different_collation'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'AdventureWorks'
+            Collation            = 'SQL_Latin1_General_Pref_CP850_CI_AS'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabase 'Create_Database_with_different_compatibility_level'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'Fabrikam'
+            CompatibilityLevel   = 'Version130'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabase 'Create_Database_with_different_recovery_model'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'FabrikamData'
+            RecoveryModel        = 'Simple'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabase 'Create_Database_with_specific_owner'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'FabrikamDataOwner'
+            OwnerName            = 'sa'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to remove a database with
+the database name equal to 'AdventureWorks'.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabase 'Delete_Database'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            Name                 = 'AdventureWorks'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

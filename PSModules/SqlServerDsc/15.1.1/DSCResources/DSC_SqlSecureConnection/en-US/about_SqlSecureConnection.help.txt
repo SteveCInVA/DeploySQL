@@ -1,0 +1,138 @@
+.NAME
+    SqlSecureConnection
+
+.DESCRIPTION
+    The SqlSecureConnection DSC resource configures SQL connections
+    to be encrypted. Read more about encrypted connections in this article
+    https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-encrypted-connections-to-the-database-engine.
+
+    >Note: The 'LocalSystem' service account will return a connection
+    >error, even though the connection has been successful. In that case,
+    >the 'SYSTEM' service account can be used.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * You must have a Certificate that is trusted and issued for
+       ServerAuthentication.
+    * The name of the Certificate must be the fully qualified domain name (FQDN)
+       of the computer.
+    * The Certificate must be installed in the LocalMachine Personal store.
+    * If PsDscRunAsCredential common parameter is used to run the resource, the
+      specified credential must have permissions to connect to the SQL Server instance
+      specified in InstanceName.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlSecureConnection.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL Server instance to be configured.
+
+.PARAMETER Thumbprint
+    Required - String
+    Thumbprint of the certificate being used for encryption. If parameter Ensure is set to 'Absent' then the parameter Certificate can be set to an empty string.
+
+.PARAMETER ForceEncryption
+    Write - Boolean
+    If all connections to the SQL Server instance should be encrypted. If this parameter is not assigned a value, the default value is $true meaning that all connections must be encrypted.
+
+.PARAMETER ServiceAccount
+    Required - String
+    Name of the account running the SQL Server Windows service. If this parameter is set to 'LocalSystem' then a connection error is displayed, instead use the value 'SYSTEM'.
+
+.PARAMETER SuppressRestart
+    Write - Boolean
+    If set to $true then the required restart will be suppressed. You will need to restart the service before changes will take effect. The default value is $false.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    If encryption should be enabled ('Present') or disabled ('Absent').
+
+.EXAMPLE 1
+
+This example performs a standard Sql encryption setup. Forcing all connections to be encrypted.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlSecureConnection 'ForceSecureConnection'
+        {
+            InstanceName    = 'MSSQLSERVER'
+            Thumbprint      = 'fb0b82c94b80da26cf0b86f10ec0c50ae7864a2c'
+            ForceEncryption = $true
+            Ensure          = 'Present'
+            ServiceAccount  = 'SqlSvc'
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example performs a standard Sql encryption setup. All connections are not forced to be encrypted.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlSecureConnection 'SecureConnectionNotForced'
+        {
+            InstanceName    = 'MSSQLSERVER'
+            Thumbprint      = 'fb0b82c94b80da26cf0b86f10ec0c50ae7864a2c'
+            ForceEncryption = $false
+            Ensure          = 'Present'
+            ServiceAccount  = 'SqlSvc'
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example performs a standard Sql encryption setup. Forcing all connections to be encrypted.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlSecureConnection 'SecureConnectionAbsent'
+        {
+            InstanceName    = 'MSSQLSERVER'
+            Thumbprint      = ''
+            Ensure          = 'Absent'
+            ServiceAccount  = 'SqlSvc'
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example performs a standard Sql encryption setup using the "SYSTEM" account.
+Note that the "LocalSystem" account should not be used because it returns a connection error,
+even though it inherits the "SYSTEM" account's privileges.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlSecureConnection 'SecureConnectionUsingSYSTEMAccount'
+        {
+            InstanceName    = 'MSSQLSERVER'
+            Thumbprint      = 'fb0b82c94b80da26cf0b86f10ec0c50ae7864a2c'
+            ForceEncryption = $false
+            Ensure          = 'Present'
+            ServiceAccount  = 'SYSTEM'
+        }
+    }
+}
+

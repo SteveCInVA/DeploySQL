@@ -1,0 +1,117 @@
+.NAME
+    SqlReplication
+
+.DESCRIPTION
+    The SqlReplication DSC resource manages SQL Replication distribution
+    and publishing.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlReplication.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the SQL Server instance name where replication distribution will be configured.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    'Present' will configure replication, 'Absent' will disable (remove) replication. Default value is 'Present'.
+
+.PARAMETER DistributorMode
+    Required - String
+    Allowed values: Local, Remote
+    'Local' - Instance will be configured as it's own distributor. 'Remote' - Instance will be configure with remote distributor (remote distributor needs to be already configured for distribution).
+
+.PARAMETER AdminLinkCredentials
+    Required - Instance
+    AdminLink password to be used when setting up publisher distributor relationship.
+
+.PARAMETER DistributionDBName
+    Write - String
+    Distribution database name. If the parameter DistributionMode  is set to 'Local' this will be created, if 'Remote' needs to match distribution database on remote distributor. Default value is 'distributor'.
+
+.PARAMETER RemoteDistributor
+    Write - String
+    Specifies the SQL Server network name that will be used as distributor for local instance. Required if parameter DistributionMode  is set to 'Remote'.
+
+.PARAMETER WorkingDirectory
+    Required - String
+    Publisher working directory.
+
+.PARAMETER UseTrustedConnection
+    Write - Boolean
+    Publisher security mode. Default value is $true.
+
+.PARAMETER UninstallWithForce
+    Write - Boolean
+    Force flag for uninstall procedure. Default values is `$true?.
+
+.EXAMPLE 1
+
+This example shows how to configure a SQL Server instance as the distributor.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlReplication 'distributor'
+        {
+            Ensure               = 'Present'
+            InstanceName         = 'DISTRIBUTOR' # Or 'MSSQLSERVER' for default instance.
+            AdminLinkCredentials = $SqlAdministratorCredential
+            DistributorMode      = 'Local'
+            DistributionDBName   = 'MyDistribution'
+            WorkingDirectory     = 'C:\Temp'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to configure a SQL Server instance as the publisher.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlReplication 'publisher'
+        {
+            Ensure               = 'Present'
+            InstanceName         = 'PUBLISHER' # Or 'MSSQLSERVER' for default instance.
+            AdminLinkCredentials = $SqlAdministratorCredential
+            DistributorMode      = 'Remote'
+            DistributionDBName   = 'MyDistribution'
+            RemoteDistributor    = 'distsqlsrv.company.local\DISTRIBUTOR'
+            WorkingDirectory     = 'C:\Temp'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

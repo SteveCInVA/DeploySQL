@@ -1,0 +1,95 @@
+.NAME
+    SqlConfiguration
+
+.DESCRIPTION
+    The SqlConfiguration DSC resource manages the https://msdn.microsoft.com/en-us/library/ms189631.aspx
+    on a SQL Server instance.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlConfiguration.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL Server instance to be configured.
+
+.PARAMETER OptionName
+    Key - String
+    The name of the SQL Server Database Engine instance configuration option. For all possible values reference the article https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/server-configuration-options-sql-server or run sp_configure.
+
+.PARAMETER OptionValue
+    Required - SInt32
+    The desired value of the configuration option.
+
+.PARAMETER ServerName
+    Write - String
+    The hostname of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER RestartService
+    Write - Boolean
+    Determines whether the instance should be restarted after updating the configuration option.
+
+.PARAMETER RestartTimeout
+    Write - UInt32
+    The length of time, in seconds, to wait for the service to restart. Default is 120 seconds.
+
+.EXAMPLE 1
+
+This example shows how to configure two SQL Server instances on the same
+server to have CLR enabled.
+
+.NOTES
+To get all available options run sp_configure on the SQL Server instance,
+or refer to https://msdn.microsoft.com/en-us/library/ms189631.aspx
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        foreach ($sqlInstance in @('CONTENT', 'DIST'))
+        {
+            SqlConfiguration ('SQLConfigCLR_{0}' -f $sqlInstance)
+            {
+                ServerName   = $Node.NodeName
+                InstanceName = $sqlInstance
+                OptionName   = 'clr enabled'
+                OptionValue  = 1
+            }
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to configure two SQL Server instances on the same
+server to have the setting 'priority boost' enabled.
+
+.NOTES
+To get all available options run sp_configure on the SQL Server instance,
+or refer to https://msdn.microsoft.com/en-us/library/ms189631.aspx
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlConfiguration 'SQLConfigPriorityBoost'
+        {
+
+            ServerName     = 'localhost'
+            InstanceName   = 'MSSQLSERVER'
+            OptionName     = 'priority boost'
+            OptionValue    = 1
+            RestartService = $false
+        }
+    }
+}
+

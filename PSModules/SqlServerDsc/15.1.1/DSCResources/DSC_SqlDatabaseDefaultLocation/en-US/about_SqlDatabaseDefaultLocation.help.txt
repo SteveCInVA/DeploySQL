@@ -1,0 +1,104 @@
+.NAME
+    SqlDatabaseDefaultLocation
+
+.DESCRIPTION
+    The SqlDatabaseDefaultLocation DSC resource is used to configure default
+    locations for user databases. The types of default locations that can be
+    changed are Data, Log, and Backup. For more information about database
+    default locations, please read the article https://technet.microsoft.com/en-us/library/dd206993.aspx.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabaseDefaultLocation.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER Type
+    Key - String
+    Allowed values: Data, Log, Backup
+    The type of database default location to be configured.
+
+.PARAMETER Path
+    Required - String
+    The path to the default directory to be set for the type specified in the parameter Type.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER RestartService
+    Write - Boolean
+    If set to $true then SQL Server and dependent services will be restarted if a change to the configuration is made. The default value is $false.
+
+.PARAMETER ProcessOnlyOnActiveNode
+    Write - Boolean
+    Specifies that the resource will only determine if a change is needed if the target node is the active host of the SQL Server instance.
+
+.PARAMETER IsActiveNode
+    Read - Boolean
+    Returns if the current node is actively hosting the SQL Server instance.
+
+.EXAMPLE 1
+
+This example shows how to manage database default locations for Data, Logs, and Backups for SQL Server.
+
+In the event this is applied to a Failover Cluster Instance (FCI), the
+ProcessOnlyOnActiveNode property will tell the Test-TargetResource function
+to evaluate if any changes are needed if the node is actively hosting the
+SQL Server Instance.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabaseDefaultLocation 'Set_SqlDatabaseDefaultDirectory_Data'
+        {
+            ServerName              = 'sqltest.company.local'
+            InstanceName            = 'DSC'
+            ProcessOnlyOnActiveNode = $true
+            Type                    = 'Data'
+            Path                    = 'C:\Program Files\Microsoft SQL Server'
+
+            PsDscRunAsCredential    = $SqlAdministratorCredential
+        }
+
+        SqlDatabaseDefaultLocation 'Set_SqlDatabaseDefaultDirectory_Log'
+        {
+            ServerName              = 'sqltest.company.local'
+            InstanceName            = 'DSC'
+            ProcessOnlyOnActiveNode = $true
+            Type                    = 'Log'
+            Path                    = 'C:\Program Files\Microsoft SQL Server'
+
+            PsDscRunAsCredential    = $SqlAdministratorCredential
+        }
+
+        SqlDatabaseDefaultLocation 'Set_SqlDatabaseDefaultDirectory_Backup'
+        {
+            ServerName              = 'sqltest.company.local'
+            InstanceName            = 'DSC'
+            ProcessOnlyOnActiveNode = $true
+            Type                    = 'Backup'
+            Path                    = 'C:\Program Files\Microsoft SQL Server'
+
+            PsDscRunAsCredential    = $SqlAdministratorCredential
+        }
+    }
+}
+

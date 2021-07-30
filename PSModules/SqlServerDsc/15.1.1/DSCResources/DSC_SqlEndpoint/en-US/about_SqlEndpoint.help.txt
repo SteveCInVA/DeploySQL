@@ -1,0 +1,231 @@
+.NAME
+    SqlEndpoint
+
+.DESCRIPTION
+    The SqlEndpoint DSC resource is used to create an endpoint. Currently
+    it only supports creating a database mirror and a service broker endpoint. A database mirror
+    endpoint can be used by AlwaysOn.
+
+    >Note: The endpoint will be started after creation, but will not be enforced
+    >unless the the parameter State is specified.
+    >To set connect permission to the endpoint, please use
+    >the resource #sqlendpointpermission.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Security Requirements
+
+    * The built-in parameter PsDscRunAsCredential must be set to the credentials of
+      an account with the permission to create and alter endpoints.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlEndpoint.
+
+.PARAMETER EndpointName
+    Key - String
+    The name of the endpoint.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER EndpointType
+    Required - String
+    Allowed values: DatabaseMirroring, ServiceBroker
+    Specifies the type of endpoint. Currently the only types that are supported are the Database Mirroring and the Service Broker type.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    If the endpoint should be present or absent. Default values is 'Present'.
+
+.PARAMETER Port
+    Write - UInt16
+    The network port the endpoint is listening on. Default value is 5022, but default value is only used during endpoint creation, it is not enforce.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER IpAddress
+    Write - String
+    The network IP address the endpoint is listening on. Default value is '0.0.0.0' which means listen on any valid IP address. The default value is only used during endpoint creation, it is not enforce.
+
+.PARAMETER Owner
+    Write - String
+    The owner of the endpoint. Default is the login used for the creation.
+
+.PARAMETER IsMessageForwardingEnabled
+    Write - Boolean
+    Specifies whether messages received by this endpoint that are for services located elsewhere will be forwarded.
+
+.PARAMETER MessageForwardingSize
+    Write - UInt32
+    Specifies the maximum amount of storage in megabytes to allocate for the endpoint to use when storing messages that are to be forwarded.
+
+.PARAMETER State
+    Write - String
+    Allowed values: Started, Stopped, Disabled
+    Specifies the state of the endpoint. When an endpoint is created and the state is not specified then the endpoint will be started after it is created. The state will not be enforced unless the parameter is specified.
+
+.EXAMPLE 1
+
+This example will add a Database Mirror endpoint, to two instances, using
+the default values.
+
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpoint 'SQLConfigureEndpoint-Instance1'
+        {
+            EndpointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            InstanceName         = 'INST1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpoint 'SQLConfigureEndpoint-Instances2'
+        {
+            EndpointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            InstanceName         = 'INST2'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example will add a Database Mirror endpoint with specific listener port,
+listener IP address and owner.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpoint 'SQLConfigureEndpoint'
+        {
+            Ensure               = 'Present'
+
+            EndpointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Port                 = 9001
+            IpAddress            = '192.168.0.20'
+            Owner                = 'sa'
+            State                = 'Started'
+
+            ServerName           = 'server1.company.local'
+            InstanceName         = 'INST1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example will add a Service Broker endpoint, to a instance, complete with MessageForwarding
+
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpoint 'ServiceBroker'
+        {
+            Ensure                     = 'Present'
+
+            EndpointName               = 'SSBR'
+            EndpointType               = 'ServiceBroker'
+            Port                       = 5023
+            IpAddress                  = '192.168.0.20'
+            Owner                      = 'sa'
+            State                      = 'Started'
+
+            ServerName                 = 'server1.company.local'
+            InstanceName               = 'INST1'
+
+            IsMessageForwardingEnabled = $true
+            MessageForwardingSize      = 2
+
+            PsDscRunAsCredential       = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example will remove an Database Mirror endpoint from two instances.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlEndpoint 'SQLConfigureEndpoint-Instance1'
+        {
+            Ensure               = 'Absent'
+
+            EndpointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            InstanceName         = 'INST1'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpoint 'SQLConfigureEndpoint-Instance2'
+        {
+            Ensure               = 'Absent'
+
+            EndpointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            InstanceName         = 'INST2'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

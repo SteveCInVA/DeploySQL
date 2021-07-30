@@ -1,0 +1,99 @@
+.NAME
+    SqlAlwaysOnService
+
+.DESCRIPTION
+    The SqlAlwaysOnService DSC resource enables or disables SQL Server Always
+    On high availability and disaster recovery (Always On HADR) for a SQL
+    Server instance.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Target machine must be a member of a Windows Server Failover Cluster.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAlwaysOnService.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER Ensure
+    Required - String
+    Allowed values: Present, Absent
+    An enumerated value that describes if the SQL Server should have Always On High Availability and Disaster Recovery (HADR) property enabled ('Present') or disabled ('Absent').
+
+.PARAMETER ServerName
+    Write - String
+    The hostname of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER RestartTimeout
+    Write - UInt32
+    The length of time, in seconds, to wait for the service to restart. Default value is 120 seconds.
+
+.PARAMETER IsHadrEnabled
+    Read - Boolean
+    Returns the status of AlwaysOn High Availability and Disaster Recovery (HADR).
+
+.EXAMPLE 1
+
+This example shows how to enable SQL Server Always On high availability and
+disaster recovery (HADR).
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAlwaysOnService 'EnableAlwaysOn'
+        {
+            Ensure               = 'Present'
+            ServerName           = 'SP23-VM-SQL1'
+            InstanceName         = 'MSSQLSERVER'
+            RestartTimeout       = 120
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to disable SQL Server Always On high availability and
+disaster recovery (HADR).
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAlwaysOnService 'DisableAlwaysOn'
+        {
+            Ensure               = 'Absent'
+            ServerName           = 'SP23-VM-SQL1'
+            InstanceName         = 'MSSQLSERVER'
+            RestartTimeout       = 120
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

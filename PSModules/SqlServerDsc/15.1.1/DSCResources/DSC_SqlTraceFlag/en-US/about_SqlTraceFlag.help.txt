@@ -1,0 +1,137 @@
+.NAME
+    SqlTraceFlag
+
+.DESCRIPTION
+    The SqlTraceFlag DSC resource will remove or set one or more trace flags on a sql server engine.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Security Requirements
+
+    * The account running this resource must have admin access to the Windows Server.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlTraceFlag.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER TraceFlags
+    Write - UInt32Array
+    An array of trace flags that startup options should have. This parameter will replace all the current trace flags with the specified trace flags.
+
+.PARAMETER TraceFlagsToInclude
+    Write - UInt32Array
+    An array of trace flags to be added to the existing trace flags.
+
+.PARAMETER TraceFlagsToExclude
+    Write - UInt32Array
+    An array of trace flags to be removed from the existing trace flags.
+
+.PARAMETER RestartService
+    Write - Boolean
+    Forces a restart of the Database Engine service and dependent services after the desired state is set. Default values is $false.
+
+.PARAMETER RestartTimeout
+    Write - UInt32
+    The time the resource waits while the sql server services are restarted. Defaults to 120 seconds
+
+.EXAMPLE 1
+
+This example shows how to set TraceFlags where all existing
+TraceFlags are overwriten by these
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlTraceFlag 'Set_SqlTraceFlags'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            TraceFlags           = 834, 1117, 1118, 2371, 3226
+            RestartService      = $true
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to set TraceFlags while keeping all existing
+traceflags. Also one existing traceflag is removed.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlTraceFlag 'Set_SqlTraceFlagsIncludeExclude'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            TraceFlagsToInclude  = 834, 1117, 1118, 2371, 3226
+            TraceFlagsToExclude  = 1112
+            RestartService      = $true
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to clear all TraceFlags.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlTraceFlag 'Remove_SqlTraceFlags'
+        {
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+            RestartService       = $true
+            TraceFlags           = @()
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

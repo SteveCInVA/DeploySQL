@@ -1,0 +1,81 @@
+.NAME
+    SqlAgentOperator
+
+.DESCRIPTION
+    The SqlAgentOperator DSC resource is used to add/remove SQL Agent Operators.
+    The resource can also update the operators email address.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAgentOperator.
+
+.PARAMETER Name
+    Key - String
+    The name of the SQL Server Agent operator.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies if the SQL Server Agent operator should be present or absent. Default value is 'Present'.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER EmailAddress
+    Write - String
+    The email address to be used for the SQL Server Agent operator.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the SQL Agent Operator
+DbaTeam exists with the correct email address.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAgentOperator 'Add_DbaTeam'
+        {
+            Ensure       = 'Present'
+            Name         = 'DbaTeam'
+            ServerName   = 'TestServer'
+            InstanceName = 'MSSQLServer'
+            EmailAddress = 'dbateam@company.com'
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the SQL Agent Operator
+DbaTeam does not exist.
+
+Configuration Example
+{
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAgentOperator 'Remove_DbaTeam'
+        {
+            Ensure       = 'Absent'
+            Name         = 'DbaTeam'
+            ServerName   = 'TestServer'
+            InstanceName = 'MSSQLServer'
+        }
+    }
+}
+

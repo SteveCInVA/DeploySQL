@@ -1,0 +1,188 @@
+.NAME
+    SqlRSSetup
+
+.DESCRIPTION
+    The SqlRSSetup DSC resource installs the standalone
+    https://docs.microsoft.com/en-us/sql/reporting-services/create-deploy-and-manage-mobile-and-paginated-reports.
+
+    If both SourceCredential and PsDscRunAsCredential is used then the
+    credentials in SourceCredential will only be used to copy the
+    installation media locally, and then the credentials in PsDscRunAsCredential
+    will be used during installation. If PsDscRunAsCredential is not
+    used, then the installation will run as SYSTEM.
+
+    >To install Microsoft SQL Server Reporting Services 2016 (or older),
+    >please use the resource SqlSetup.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * If PsDscRunAsCredential common parameter is used to run the resource,
+      the specified credential must have permissions to connect to the location
+      where the Microsoft SQL Server Reporting Services media is placed.
+    * The parameter IAcceptLicenseTerms must be set to 'Yes'.
+    * The parameter InstanceName can only be set to 'SSRS' since there is
+      no way to change the instance name.
+    * When using action 'Uninstall', the same version of the executable as the version
+      of the installed product must be used. If not, sometimes the uninstall
+      is successful (because the executable returns exit code 0) but the
+      Microsoft SQL Server Reporting Services instance was not actually removed.
+
+    >NOTE: When using the action 'Uninstall' and the target node to begin with
+    >requires a restart, on the first run the Microsoft SQL Server Reporting
+    >Services instance will not be uninstalled, but instead exits with code
+    >3010 and the node will be, by default, restarted. On the second run after
+    >restart, the Microsoft SQL Server Reporting Services instance will be
+    >uninstalled. If the parameter SuppressRestart is used, then the node must
+    >be restarted manually before the Microsoft SQL Server Reporting Services
+    >instance will be successfully uninstalled.
+    >
+    >The Microsoft SQL Server Reporting Services log will indicate that a
+    >restart is required by outputting; "*No action was taken as a system
+    >reboot is required (0x8007015E)*". The log is default located in the
+    >SSRS folder in %TEMP%, e.g. C:\Users\<user>\AppData\Local\Temp\SSRS.
+
+    ## Known issues
+
+    * https://github.com/dsccommunity/SqlServerDsc/issues/1311
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlRSSetup.
+
+.PARAMETER InstanceName
+    Key - String
+    Allowed values: SSRS
+    Name of the Microsoft SQL Server Reporting Service instance to installed. This can only be set to 'SSRS'.
+
+.PARAMETER IAcceptLicenseTerms
+    Required - String
+    Allowed values: Yes
+    Accept licens terms. This must be set to 'Yes'.
+
+.PARAMETER SourcePath
+    Required - String
+    The path to the installation media file to be used for installation, e.g an UNC path to a shared resource. Environment variables can be used in the path.
+
+.PARAMETER Action
+    Write - String
+    Allowed values: Install, Uninstall
+    The action to be performed. Default value is 'Install' which performs either install or upgrade.
+
+.PARAMETER SourceCredential
+    Write - Instance
+    Credentials used to access the path set in the parameter SourcePath.
+
+.PARAMETER SuppressRestart
+    Write - Boolean
+    Suppresses any attempts to restart.
+
+.PARAMETER ProductKey
+    Write - String
+    Sets the custom license key, e.g. '12345-12345-12345-12345-12345'. This parameter is mutually exclusive with the parameter Edition.
+
+.PARAMETER ForceRestart
+    Write - Boolean
+    Forces a restart after installation is finished. If set to $true then it will override the parameter SuppressRestart.
+
+.PARAMETER EditionUpgrade
+    Write - Boolean
+    Upgrades the edition of the installed product. Requires that either the ProductKey or the Edition parameter is also assigned. By default no edition upgrade is performed.
+
+.PARAMETER VersionUpgrade
+    Write - Boolean
+    Upgrades installed product version if the major product version of the source executable is higher than the currently installed major version. Requires that either the ProductKey or the Edition parameter is also assigned. Default is $false.
+
+.PARAMETER Edition
+    Write - String
+    Allowed values: Development, Evaluation, ExpressAdvanced
+    Sets the custom free edition. This parameter is mutually exclusive with the parameter ProductKey.
+
+.PARAMETER LogPath
+    Write - String
+    Specifies the setup log file location, e.g. log.txt. By default log files are created under %TEMP%.
+
+.PARAMETER InstallFolder
+    Write - String
+    Sets the install folder, e.g. C:\Program Files\SSRS. Default value is C:\Program Files\Microsoft SQL Server Reporting Services.
+
+.PARAMETER SetupProcessTimeout
+    Write - UInt32
+    The timeout, in seconds, to wait for the setup process to finish. Default value is 7200 seconds (2 hours). If the setup process does not finish before this time an error will be thrown.
+
+.PARAMETER ErrorDumpDirectory
+    Read - String
+    Returns the path to error dump log files.
+
+.PARAMETER CurrentVersion
+    Read - String
+    Returns the current version of the installed Microsoft SQL Server Reporting Service instance.
+
+.PARAMETER ServiceName
+    Read - String
+    Returns the current name of the Microsoft SQL Server Reporting Service instance Windows service.
+
+.EXAMPLE 1
+
+This example shows how to install a Microsoft SQL Server Reporting Service
+instance (2017 or newer).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRSSetup 'InstallDefaultInstance'
+        {
+            InstanceName         = 'SSRS'
+            IAcceptLicenseTerms   = 'Yes'
+            SourcePath           = 'C:\InstallMedia\SQLServerReportingServices.exe'
+            Edition              = 'Development'
+
+            PsDscRunAsCredential = $SqlInstallCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to install a Microsoft SQL Server Reporting Service
+instance (2017 or newer).
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRSSetup 'InstallDefaultInstance'
+        {
+            InstanceName         = 'SSRS'
+            SourcePath           = 'C:\InstallMedia\SQLServerReportingServices.exe'
+            Action               = 'Uninstall'
+
+            # This needs to be set to although it is not used during uninstall.
+            IAcceptLicenseTerms   = 'Yes'
+
+            PsDscRunAsCredential = $SqlInstallCredential
+        }
+    }
+}
+

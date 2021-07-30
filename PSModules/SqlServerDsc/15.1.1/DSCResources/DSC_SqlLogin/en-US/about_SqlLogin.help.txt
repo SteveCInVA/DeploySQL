@@ -1,0 +1,193 @@
+.NAME
+    SqlLogin
+
+.DESCRIPTION
+    The SqlLogin DSC resource manages SQL Server logins
+    for a SQL Server instance.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * When the LoginType of 'SqlLogin' is used, then the login authentication
+      mode must have been set to Mixed or Normal. If set to Integrated
+      and error will be thrown.
+    * The LoginMustChangePassword property/parameter is only valid on a SqlLogin
+      where the LoginType property/parameter is set to 'SqlLogin'.
+    * The LoginMustChangePassword property/parameter can not be used to change
+      this setting on a pre-existing SqlLogin - This property/parameter can only
+      be used when creating a new SqlLogin and where subsequent updates will
+      not be applied or, alternatively, when the desired state will not change (for example,
+      where LoginMustChangePassword is initially set to $false and will always
+      be set to $false).
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlLogin.
+
+.PARAMETER Name
+    Key - String
+    The name of the login.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL Server instance to be configured.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    The specified login should be 'Present' or 'Absent'. Default is 'Present'.
+
+.PARAMETER LoginType
+    Write - String
+    Allowed values: WindowsUser, WindowsGroup, SqlLogin, Certificate, AsymmetricKey, ExternalUser, ExternalGroup
+    The type of login to be created. If LoginType is 'WindowsUser' or 'WindowsGroup' then provide the name in the format DOMAIN\name. Default is 'WindowsUser'. The login types 'Certificate', 'AsymmetricKey', 'ExternalUser', and 'ExternalGroup' are not yet implemented and will currently throw an exception if used.
+
+.PARAMETER ServerName
+    Write - String
+    The hostname of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER LoginCredential
+    Write - Instance
+    Specifies the password as a [PSCredential] object. Only applies to SQL Logins.
+
+.PARAMETER LoginMustChangePassword
+    Write - Boolean
+    Specifies if the login is required to have its password change on the next login. Only applies to SQL Logins. Default value is $true. This cannot be updated on a pre-existing SQL Login and any attempt to do this will throw an exception.
+
+.PARAMETER LoginPasswordExpirationEnabled
+    Write - Boolean
+    Specifies if the login password is required to expire in accordance to the operating system security policy. Only applies to SQL Logins. Default value is $true.
+
+.PARAMETER LoginPasswordPolicyEnforced
+    Write - Boolean
+    Specifies if the login password is required to conform to the password policy specified in the system security policy. Only applies to SQL Logins. Default value is $true.
+
+.PARAMETER Disabled
+    Write - Boolean
+    Specifies if the login is disabled. Default value is $false.
+
+.PARAMETER DefaultDatabase
+    Write - String
+    Specifies the default database name.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the Windows user 'CONTOSO\WindowsUser',
+Windows group 'CONTOSO\WindowsGroup', and the SQL Login 'SqlLogin' exists.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $LoginCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlLogin 'Add_WindowsUser'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\WindowsUser'
+            LoginType            = 'WindowsUser'
+            ServerName           = 'TestServer.company.local'
+            InstanceName         = 'DSC'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlLogin 'Add_DisabledWindowsUser'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\WindowsUser2'
+            LoginType            = 'WindowsUser'
+            ServerName           = 'TestServer.company.local'
+            InstanceName         = 'DSC'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+            Disabled             = $true
+        }
+
+        SqlLogin 'Add_WindowsUser_Set_Default_Database'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\WindowsUser3'
+            LoginType            = 'WindowsUser'
+            ServerName           = 'TestServer.company.local'
+            InstanceName         = 'DSC'
+            DefaultDatabase      = 'contoso'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlLogin 'Add_WindowsGroup'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\WindowsGroup'
+            LoginType            = 'WindowsGroup'
+            ServerName           = 'TestServer.company.local'
+            InstanceName         = 'DSC'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlLogin 'Add_SqlLogin'
+        {
+            Ensure                         = 'Present'
+            Name                           = 'SqlLogin'
+            LoginType                      = 'SqlLogin'
+            ServerName                     = 'TestServer.company.local'
+            InstanceName                   = 'DSC'
+            LoginCredential                = $LoginCredential
+            LoginMustChangePassword        = $false
+            LoginPasswordExpirationEnabled = $true
+            LoginPasswordPolicyEnforced    = $true
+            PsDscRunAsCredential           = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to remove the Windows user 'CONTOSO\WindowsUser',
+Windows group 'CONTOSO\WindowsGroup', and the SQL Login 'SqlLogin'.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlLogin 'Remove_WindowsUser'
+        {
+            Ensure       = 'Absent'
+            Name         = 'CONTOSO\WindowsUser'
+            LoginType    = 'WindowsUser'
+            ServerName   = 'TestServer.company.local'
+            InstanceName = 'DSC'
+        }
+
+        SqlLogin 'Remove_WindowsGroup'
+        {
+            Ensure       = 'Absent'
+            Name         = 'CONTOSO\WindowsGroup'
+            LoginType    = 'WindowsGroup'
+            ServerName   = 'TestServer.company.local'
+            InstanceName = 'DSC'
+        }
+
+        SqlLogin 'Remove_SqlLogin'
+        {
+            Ensure       = 'Absent'
+            Name         = 'SqlLogin'
+            LoginType    = 'SqlLogin'
+            ServerName   = 'TestServer.company.local'
+            InstanceName = 'DSC'
+        }
+    }
+}
+

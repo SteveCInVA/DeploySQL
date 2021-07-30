@@ -1,0 +1,28 @@
+.NAME
+    SqlDatabaseRecoveryModel
+
+# DEPRECATION NOTICE
+
+    The SqlDatabaseRecoveryModel DSC resource is DEPRECATED. The resource
+    is replaced by a property in the resource SqlDatabase.
+
+    The documentation, examples, unit test, and integration tests have been
+    removed. This resource will be removed in a future release.
+
+.PARAMETER Name
+    Key - String
+    The SQL database name
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL instance to be configured.
+
+.PARAMETER RecoveryModel
+    Required - String
+    Allowed values: Full, Simple, BulkLogged
+    The recovery model to use for the database.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is $env:COMPUTERNAME.
+

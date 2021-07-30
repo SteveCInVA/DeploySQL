@@ -1,0 +1,179 @@
+.NAME
+    SqlProtocolTcpIp
+
+.DESCRIPTION
+    The SqlProtocolTcpIp DSC resource manages the TCP/IP
+    IP address groups for a SQL Server instance.
+
+    IP Address groups are added depending on available network cards, see
+    https://docs.microsoft.com/en-us/sql/tools/configuration-manager/tcp-ip-properties-ip-addresses-tab#adding-or-removing-ip-addresses.
+    Because of that it is not supported to add or remove IP address groups.
+
+    For more information about static and dynamic ports read the article
+    https://docs.microsoft.com/en-us/sql/tools/configuration-manager/tcp-ip-properties-ip-addresses-tab.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * Target machine must have access to the SQLPS PowerShell module or the SqlServer
+      PowerShell module.
+    * To configure a single IP address to listen on multiple ports, the
+      TcpIp protocol must also set the Listen All property to No.
+      This can be done with the resource SqlProtocol using the
+      parameter ListenOnAllIpAddresses.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlProtocolTcpIp.
+
+.PARAMETER InstanceName
+    Key - String
+    Specifies the name of the SQL Server instance to manage the IP address group for.
+
+.PARAMETER IpAddressGroup
+    Key - String
+    Specifies the name of the IP address group in the TCP/IP protocol, e.g. 'IP1', 'IP2' etc., or 'IPAll'.
+
+.PARAMETER ServerName
+    Write - String
+    Specifies the host name of the SQL Server to be configured. If the SQL Server belongs to a cluster or availability group specify the host name for the listener or cluster group. Default value is the current computer name.
+
+.PARAMETER Enabled
+    Write - Boolean
+    Specified if the IP address group should be enabled or disabled. Only used if the parameter IpAddressGroup is not set to 'IPAll'. If not specified, the existing value will not be changed.
+
+.PARAMETER IpAddress
+    Write - String
+    Specifies the IP address for the IP address group. Only used if the parameter IpAddressGroup is not set to 'IPAll'. If not specified, the existing value will not be changed.
+
+.PARAMETER UseTcpDynamicPort
+    Write - Boolean
+    Specifies whether the SQL Server instance should use a dynamic port. If not specified, the existing value will not be changed. This parameter is not allowed to be used at the same time as the parameter TcpPort.
+
+.PARAMETER TcpPort
+    Write - String
+    Specifies the TCP port(s) that SQL Server instance should be listening on. If the IP address should listen on more than one port, list all ports as a string value with the port numbers separated with a comma, e.g. '1433,1500,1501'. This parameter is limited to 2047 characters. If not specified, the existing value will not be changed. This parameter is not allowed to be used at the same time as the parameter UseTcpDynamicPort.
+
+.PARAMETER SuppressRestart
+    Write - Boolean
+    If set to $true then the any attempt by the resource to restart the service is suppressed. The default value is $false.
+
+.PARAMETER RestartTimeout
+    Write - UInt16
+    Timeout value for restarting the SQL Server services. The default value is 120 seconds.
+
+.PARAMETER IsActive
+    Read - Boolean
+    Returns $true or $false whether the IP address group is active. Not applicable for IP address group 'IPAll'.
+
+.PARAMETER AddressFamily
+    Read - String
+    Returns the IP address's adress family. Not applicable for IP address group 'IPAll'.
+
+.PARAMETER TcpDynamicPort
+    Read - String
+    Returns the TCP/IP dynamic port. Only applicable for the IP address group 'IPAll'.
+
+.EXAMPLE 1
+
+This example will set the TCP/IP address group IPAll to use dynamic port.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocolTcpIP 'ChangeIPAll'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            IpAddressGroup         = 'IPAll'
+            UseTcpDynamicPort      = $true
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example will set the TCP/IP address group IPAll to use static ports.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocolTcpIP 'ChangeIPAll'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            IpAddressGroup         = 'IPAll'
+            TcpPort                = '1433,1500,1501'
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example will set the TCP/IP address group IPAll to use static ports.
+
+The resource will be run as the account provided in $SystemAdministratorAccount.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SystemAdministratorAccount
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlProtocol 'DisableListenAllIPAddresses'
+        {
+            InstanceName           = 'MSSQLSERVER'
+            ProtocolName           = 'TcpIp'
+            Enabled                = $true
+            ListenOnAllIpAddresses = $false
+
+            PsDscRunAsCredential   = $SystemAdministratorAccount
+        }
+
+        SqlProtocolTcpIP 'ChangeIP1'
+        {
+            InstanceName         = 'MSSQLSERVER'
+            IpAddressGroup       = 'IP1'
+            Enabled              = $true
+            IpAddress            = 'fe80::7894:a6b6:59dd:c8fe%9'
+            TcpPort              = '1433,1500,1501'
+
+            PsDscRunAsCredential = $SystemAdministratorAccount
+        }
+    }
+}
+

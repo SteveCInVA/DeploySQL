@@ -1,0 +1,293 @@
+.NAME
+    SqlRS
+
+.DESCRIPTION
+    The SqlRS DSC resource initializes and configures SQL Reporting Services
+    server.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Reporting Services 20012 or later.
+    * To use parameter UseSSL target machine must be running SQL Server Reporting
+      Services 2012 or later.
+    * If PsDscRunAsCredential common parameter is used to run the resource, the
+      specified credential must have permissions to connect to the SQL Server instance
+      specified in DatabaseServerName and DatabaseInstanceName, and have permission
+      to create the Reporting Services databases.
+
+    ## Known issues
+
+    * This resource does not currently have full SSL support, please see
+      https://github.com/dsccommunity/SqlServerDsc/issues/587 for more
+      information.
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlRS.
+
+    ## Known error messages
+
+    ### Error: The parameter is incorrect (HRESULT:-2147024809)
+
+    This is caused by trying to add an URL with the wrong format
+    i.e. 'htp://+:80'.
+
+    ### Error: The Url has already been reserved (HRESULT:-2147220932)
+
+    This is caused when the URL is already reserved. For example when 'http://+:80'
+    already exist.
+
+    ### Error: Cannot create a file when that file already exists (HRESULT:-2147024713)
+
+    This is caused when trying to add another URL using the same protocol. For example
+    when trying to add 'http://+:443' when 'http://+:80' already exist.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL Server Reporting Services instance to be configured.
+
+.PARAMETER DatabaseServerName
+    Required - String
+    Name of the SQL Server to host the Reporting Services database.
+
+.PARAMETER DatabaseInstanceName
+    Required - String
+    Name of the SQL Server instance to host the Reporting Services database.
+
+.PARAMETER ReportServerVirtualDirectory
+    Write - String
+    Report Server Web Service virtual directory. Optional.
+
+.PARAMETER ReportsVirtualDirectory
+    Write - String
+    Report Manager or Report Web App virtual directory name. Optional.
+
+.PARAMETER ReportServerReservedUrl
+    Write - StringArray
+    Report Server URL reservations. Optional. If not specified, 'http://+:80' URL reservation will be used.
+
+.PARAMETER ReportsReservedUrl
+    Write - StringArray
+    Report Manager or Report Web App URL reservations. Optional. If not specified, 'http://+:80' URL reservation will be used.
+
+.PARAMETER UseSsl
+    Write - Boolean
+    If connections to the Reporting Services must use SSL. If this parameter is not assigned a value, the default is that Reporting Services does not use SSL.
+
+.PARAMETER SuppressRestart
+    Write - Boolean
+    Reporting Services need to be restarted after initialization or settings change. If this parameter is set to $true, Reporting Services will not be restarted, even after initialization.
+
+.PARAMETER IsInitialized
+    Read - Boolean
+    Returns if the Reporting Services instance initialized or not.
+
+.EXAMPLE 1
+
+This example performs a default SQL Server Reporting Services configuration.
+It will initialize SQL Server Reporting Services and register default
+Report Server Web Service and Report Manager URLs.
+
+Report Server Web Service: http://localhost:80/ReportServer
+Report Manager: http://localhost:80/Reports
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRS 'DefaultConfiguration'
+        {
+            InstanceName         = 'MSSQLSERVER'
+            DatabaseServerName   = 'localhost'
+            DatabaseInstanceName = 'MSSQLSERVER'
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example performs a custom SQL Server Reporting Services configuration.
+It will initialize SQL Server Reporting Services and register the below
+custom Report Server Web Service and Report Manager URLs.
+
+Report Server Web Service:
+http://localhost:80/MyReportServer
+https://localhost:443/MyReportServer
+
+Report Manager:
+http://localhost:80/MyReports
+https://localhost:443/MyReports
+
+Note: this resource does not currently handle SSL bindings for HTTPS endpoints.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRS 'DefaultConfiguration'
+        {
+            InstanceName                 = 'MSSQLSERVER'
+            DatabaseServerName           = 'localhost'
+            DatabaseInstanceName         = 'MSSQLSERVER'
+            ReportServerVirtualDirectory = 'MyReportServer'
+            ReportsVirtualDirectory      = 'MyReports'
+            ReportServerReservedUrl      = @('http://+:80', 'https://+:443')
+            ReportsReservedUrl           = @('http://+:80', 'https://+:443')
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example performs a custom SQL Server Reporting Services configuration.
+It will initialize SQL Server Reporting Services and register the below
+custom Report Server Web Service and Report Manager URLs and enable SSL.
+
+Report Server Web Service: https://localhost:443/MyReportServer ()
+Report Manager: https://localhost:443/MyReports
+
+Note: this resource does not currently handle SSL bindings for HTTPS endpoints.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlRS 'DefaultConfiguration'
+        {
+            InstanceName                 = 'MSSQLSERVER'
+            DatabaseServerName           = 'localhost'
+            DatabaseInstanceName         = 'MSSQLSERVER'
+            ReportServerVirtualDirectory = 'MyReportServer'
+            ReportsVirtualDirectory      = 'MyReports'
+            ReportServerReservedUrl      = @('https://+:443')
+            ReportsReservedUrl           = @('https://+:443')
+            UseSsl                       = $true
+        }
+    }
+}
+
+.EXAMPLE 4
+
+This example installs to instances where the first named instance is used for
+the Reporting Services databases, and the second named instance is used for
+Reporting Services. After installing the two instances, the configuration
+performs a default SQL Server Reporting Services configuration. It will
+initialize SQL Server Reporting Services and register the default
+Report Server Web Service and Report Manager URLs:
+
+Report Manager: http://localhost:80/Reports_RS
+Report Server Web Service: http://localhost:80/ReportServer_RS
+
+Configuration Example
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlInstallCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlServiceCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $SqlAgentServiceCredential,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Management.Automation.PSCredential]
+        $ReportingServicesServiceCredential
+    )
+
+    Import-DscResource -ModuleName PSDscResources -ModuleVersion '2.12.0.0'
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node localhost
+    {
+        WindowsFeature 'NetFramework45'
+        {
+            Name   = 'NET-Framework-45-Core'
+            Ensure = 'Present'
+        }
+
+        SqlSetup 'InstallDatabaseEngine'
+        {
+            InstanceName          = 'RSDB'
+            Features              = 'SQLENGINE'
+            SourcePath            = 'Z:\Sql2016Media'
+            BrowserSvcStartupType = 'Automatic'
+            SQLCollation          = 'Finnish_Swedish_CI_AS'
+            SQLSvcAccount         = $SqlServiceCredential
+            AgtSvcAccount         = $SqlAgentServiceCredential
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            UpdateEnabled         = 'False'
+
+            SQLSysAdminAccounts   = @(
+                $SqlAdministratorCredential.UserName
+            )
+
+            PsDscRunAsCredential  = $SqlInstallCredential
+
+            DependsOn             = @(
+                '[WindowsFeature]NetFramework45'
+            )
+        }
+
+        SqlSetup 'InstallReportingServicesInstance'
+        {
+            InstanceName          = 'RS'
+            Features              = 'RS'
+            SourcePath            = 'Z:\Sql2016Media'
+            BrowserSvcStartupType = 'Automatic'
+            RSSvcAccount          = $ReportingServicesServiceCredential
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            UpdateEnabled         = 'False'
+
+            PsDscRunAsCredential  = $SqlInstallCredential
+
+            DependsOn             = @(
+                '[WindowsFeature]NetFramework45'
+                '[SqlSetup]InstallDatabaseEngine'
+            )
+        }
+
+        SqlRS 'ConfigureReportingServiceInstance'
+        {
+            # Instance name for the Reporting Services.
+            InstanceName         = 'RS'
+
+            <#
+                Instance for Reporting Services databases.
+                Tge value $env:COMPUTERNAME can only be used if the configuration
+                is compiled on the node that should contain the instance 'RSDB'.
+                If not, set to the node name.
+            #>
+            DatabaseServerName   = $env:COMPUTERNAME
+            DatabaseInstanceName = 'RSDB'
+
+            PsDscRunAsCredential = $SqlInstallCredential
+
+            DependsOn            = @(
+                '[SqlSetup]InstallReportingServicesInstance'
+            )
+        }
+    }
+}
+

@@ -1,0 +1,313 @@
+.NAME
+    SqlAG
+
+.DESCRIPTION
+    The SqlAG DSC resource is used to create, remove, and update an Always On
+    Availability Group. It will also manage the Availability Group replica on the
+    specified node.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+    * 'NT SERVICE\ClusSvc' or 'NT AUTHORITY\SYSTEM' must have the 'Connect SQL',
+      'Alter Any Availability Group', and 'View Server State' permissions.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAG.
+
+.PARAMETER Name
+    Key - String
+    Specifies the name of the availability group.
+
+.PARAMETER ServerName
+    Required - String
+    Hostname of the SQL Server to be configured.
+
+.PARAMETER InstanceName
+    Key - String
+    Name of the SQL instance to be configured.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies if the availability group should be present or absent. Default value is 'Present'.
+
+.PARAMETER AutomatedBackupPreference
+    Write - String
+    Allowed values: Primary, SecondaryOnly, Secondary, None
+    Specifies the automated backup preference for the availability group. When creating a group the default is 'None'.
+
+.PARAMETER AvailabilityMode
+    Write - String
+    Allowed values: AsynchronousCommit, SynchronousCommit
+    Specifies the replica availability mode. When creating a group the default is 'AsynchronousCommit'.
+
+.PARAMETER BackupPriority
+    Write - UInt32
+    Specifies the desired priority of the replicas in performing backups. The acceptable values for this parameter are: integers from 0 through 100. Of the set of replicas which are online and available, the replica that has the highest priority performs the backup. When creating a group the default is 50.
+
+.PARAMETER BasicAvailabilityGroup
+    Write - Boolean
+    Specifies the type of availability group is Basic. This is only available is SQL Server 2016 and later and is ignored when applied to previous versions.
+
+.PARAMETER DatabaseHealthTrigger
+    Write - Boolean
+    Specifies if the option Database Level Health Detection is enabled. This is only available is SQL Server 2016 and later and is ignored when applied to previous versions.
+
+.PARAMETER DtcSupportEnabled
+    Write - Boolean
+    Specifies if the option Database DTC Support is enabled. This is only available is SQL Server 2016 and later and is ignored when applied to previous versions. This can not be altered once the availability group is created and is ignored if it is the case.
+
+.PARAMETER ConnectionModeInPrimaryRole
+    Write - String
+    Allowed values: AllowAllConnections, AllowReadWriteConnections
+    Specifies how the availability replica handles connections when in the primary role.
+
+.PARAMETER ConnectionModeInSecondaryRole
+    Write - String
+    Allowed values: AllowNoConnections, AllowReadIntentConnectionsOnly, AllowAllConnections
+    Specifies how the availability replica handles connections when in the secondary role.
+
+.PARAMETER EndpointHostName
+    Write - String
+    Specifies the hostname or IP address of the availability group replica endpoint. When creating a group the default is the instance network name.
+
+.PARAMETER FailureConditionLevel
+    Write - String
+    Allowed values: OnServerDown, OnServerUnresponsive, OnCriticalServerErrors, OnModerateServerErrors, OnAnyQualifiedFailureCondition
+    Specifies the automatic failover behavior of the availability group.
+
+.PARAMETER FailoverMode
+    Write - String
+    Allowed values: Automatic, Manual
+    Specifies the failover mode. When creating a group the default is 'Manual'.
+
+.PARAMETER HealthCheckTimeout
+    Write - UInt32
+    Specifies the length of time, in milliseconds, after which AlwaysOn Availability Groups declare an unresponsive server to be unhealthy. When creating a group the default is 30000.
+
+.PARAMETER ProcessOnlyOnActiveNode
+    Write - Boolean
+    Specifies that the resource will only determine if a change is needed if the target node is the active host of the SQL Server instance.
+
+.PARAMETER EndpointUrl
+    Read - String
+    Returns the URL of the availability group replica endpoint.
+
+.PARAMETER EndpointPort
+    Read - UInt32
+    Returns the port the database mirroring endpoint is listening on.
+
+.PARAMETER Version
+    Read - UInt32
+    Returns the major version of the SQL Server instance.
+
+.PARAMETER IsActiveNode
+    Read - Boolean
+    Returns if the current node is actively hosting the SQL Server instance.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the Availability Group 'TestAG' exists.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node $AllNodes.NodeName
+    {
+        # Adding the required service account to allow the cluster to log into SQL
+        SqlLogin 'AddNTServiceClusSvc'
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Add the required permissions to the cluster service login
+        SqlPermission 'AddNTServiceClusSvcPermissions'
+        {
+            DependsOn            = '[SqlLogin]AddNTServiceClusSvc'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint 'HADREndpoint'
+        {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Ensure the HADR option is enabled for the instance
+        SqlAlwaysOnService 'EnableHADR'
+        {
+            Ensure               = 'Present'
+            InstanceName         = 'MSSQLSERVER'
+            ServerName           = $Node.NodeName
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Create the availability group on the instance tagged as the primary replica
+        SqlAG 'AddTestAG'
+        {
+            Ensure               = 'Present'
+            Name                 = 'TestAG'
+            InstanceName         = 'MSSQLSERVER'
+            ServerName           = $Node.NodeName
+
+            DependsOn            = '[SqlAlwaysOnService]EnableHADR', '[SqlEndpoint]HADREndpoint', '[SqlPermission]AddNTServiceClusSvcPermissions'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the Availability Group 'TestAG' does not exist.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node $AllNodes.NodeName
+    {
+        # Create the availability group on the instance tagged as the primary replica
+        SqlAG 'RemoveTestAG'
+        {
+            Ensure               = 'Absent'
+            Name                 = 'TestAG'
+            InstanceName         = 'MSSQLSERVER'
+            ServerName           = $Node.NodeName
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to ensure that the Availability Group 'TestAG' exists.
+
+In the event this is applied to a Failover Cluster Instance (FCI), the
+ProcessOnlyOnActiveNode property will tell the Test-TargetResource function
+to evaluate if any changes are needed if the node is actively hosting the
+SQL Server Instance.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    Node $AllNodes.NodeName
+    {
+        # Adding the required service account to allow the cluster to log into SQL
+        SqlLogin 'AddNTServiceClusSvc'
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Add the required permissions to the cluster service login
+        SqlPermission 'AddNTServiceClusSvcPermissions'
+        {
+            DependsOn            = '[SqlLogin]AddNTServiceClusSvc'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint 'HADREndpoint'
+        {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = 'MSSQLSERVER'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlwaysOnService 'EnableHADR'
+        {
+            Ensure               = 'Present'
+            InstanceName         = 'MSSQLSERVER'
+            ServerName           = $Node.NodeName
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAG 'AddTestAG'
+        {
+            Ensure                        = 'Present'
+            Name                          = 'TestAG'
+            InstanceName                  = 'MSSQLSERVER'
+            ServerName                    = $Node.NodeName
+            ProcessOnlyOnActiveNode       = $true
+
+            AutomatedBackupPreference     = 'Primary'
+            AvailabilityMode              = 'SynchronousCommit'
+            BackupPriority                = 50
+            ConnectionModeInPrimaryRole   = 'AllowAllConnections'
+            ConnectionModeInSecondaryRole = 'AllowNoConnections'
+            FailoverMode                  = 'Automatic'
+            HealthCheckTimeout            = 15000
+
+            # SQl Server 2016 or later only
+            BasicAvailabilityGroup        = $false
+            DatabaseHealthTrigger         = $true
+            DtcSupportEnabled             = $true
+
+            DependsOn                     = '[SqlAlwaysOnService]EnableHADR', '[SqlEndpoint]HADREndpoint', '[SqlPermission]AddNTServiceClusSvcPermissions'
+
+            PsDscRunAsCredential          = $SqlAdministratorCredential
+        }
+    }
+}
+

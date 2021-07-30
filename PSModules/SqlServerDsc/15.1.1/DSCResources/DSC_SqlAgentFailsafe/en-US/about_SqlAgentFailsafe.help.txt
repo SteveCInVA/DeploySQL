@@ -1,0 +1,81 @@
+.NAME
+    SqlAgentFailsafe
+
+.DESCRIPTION
+    The SqlAgentAlert DSC resource is used to add/remove SQL Agent Alerts.
+    The resource can also update the severity or message id.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlAgentAlert.
+
+.PARAMETER Name
+    Required - String
+    The name of the SQL Server Agent failsafe operator.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Specifies if the SQL Server Agent failsafe operator should be present or absent. Default value is 'Present'.
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured.
+
+.PARAMETER NotificationMethod
+    Write - String
+    Allowed values: None, NotifyEmail, Pager, NetSend, NotifyAll
+    The method of notification for the failsafe operator. The default value is 'None'.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the SQL Agent
+Failsafe Operator 'FailsafeOp' exists with the correct Notification.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAgentFailsafe 'Add_FailsafeOp'
+        {
+            Ensure             = 'Present'
+            Name               = 'FailsafeOp'
+            ServerName         = 'TestServer'
+            InstanceName       = 'MSSQLServer'
+            NotificationMethod = 'NotifyEmail'
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the SQL Agent
+failsafe operator FailsafeOp does not exist.
+
+Configuration Example
+{
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlAgentFailsafe 'Remove_FailsafeOp'
+        {
+            Ensure       = 'Absent'
+            Name         = 'FailsafeOp'
+            ServerName   = 'TestServer'
+            InstanceName = 'MSSQLServer'
+        }
+    }
+}
+

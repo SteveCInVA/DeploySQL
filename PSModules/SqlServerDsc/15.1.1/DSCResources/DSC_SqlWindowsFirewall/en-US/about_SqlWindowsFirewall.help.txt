@@ -1,0 +1,179 @@
+.NAME
+    SqlWindowsFirewall
+
+.DESCRIPTION
+    The SqlWindowsFirewall DSC resource will set default firewall rules for
+    the Database Engine, Analysis Services, SQL Browser, SQL Reporting Services,
+    and Integration Services features.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+
+    ## Firewall rules
+
+    ### Database Engine (SQLENGINE) - Default instance
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Application: sqlservr.exe | SQL Server Database Engine instance MSSQLSERVER
+    Service: SQLBrowser | SQL Server Browser
+
+    ### Database Engine (SQLENGINE) - Named instance
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Application: sqlservr.exe | SQL Server Database Engine instance \<INSTANCE\>
+    Service: SQLBrowser | SQL Server Browser
+
+    ### Analysis Services (AS) - Default instance
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Service: MSSQLServerOLAPService | SQL Server Analysis Services instance MSSQLSERVER
+    Service: SQLBrowser | SQL Server Browser
+
+    ### Analysis Services (AS) - Named instance
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Service: MSOLAP$\<INSTANCE\> | SQL Server Analysis Services instance \<INSTANCE\>
+    Service: SQLBrowser | SQL Server Browser
+
+    ### Reporting Services (RS)
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Port: tcp/80 | SQL Server Reporting Services 80
+    Port: tcp/443 | SQL Server Reporting Services 443
+
+    ### Integration Services (IS)
+
+    Firewall Rule | Firewall Display Name
+    --- | ---
+    Application: MsDtsSrvr.exe | SQL Server Integration Services Application
+    Port: tcp/135 | SQL Server Integration Services Port
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlWindowsFirewall.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    Ensures that SQL Server services firewall rules are 'Present' or 'Absent' on the machine.
+
+.PARAMETER SourcePath
+    Write - String
+    UNC path to the root of the source files for installation.
+
+.PARAMETER Features
+    Key - String
+    SQL Server features to enable firewall rules for.
+
+.PARAMETER InstanceName
+    Key - String
+    SQL Server instance to enable firewall rules for.
+
+.PARAMETER DatabaseEngineFirewall
+    Read - Boolean
+    Returns wether the firewall rule(s) for the SQL Server Database Engine is enabled.
+
+.PARAMETER BrowserFirewall
+    Read - Boolean
+    Returns wether the firewall rule(s) for the SQL Server Browser is enabled.
+
+.PARAMETER ReportingServicesFirewall
+    Read - Boolean
+    Returns wether the firewall rule(s) for SQL Server Reporting Services is enabled.
+
+.PARAMETER AnalysisServicesFirewall
+    Read - Boolean
+    Returns wether the firewall rule(s) for SQL Server Analysis Services is enabled.
+
+.PARAMETER IntegrationServicesFirewall
+    Read - Boolean
+    Returns wether the firewall rule(s) for the SQL Server Integration Services is enabled.
+
+.PARAMETER SourceCredential
+    Write - Instance
+    Credentials used to access the path set in the parameter SourcePath. This parameter is optional either if built-in parameter PsDscRunAsCredential is used, or if the source path can be access using the SYSTEM account.
+
+.EXAMPLE 1
+
+This example shows how to create the default rules for the supported features.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlWindowsFirewall 'Create_FirewallRules_For_SQL2012'
+        {
+            Ensure               = 'Present'
+            Features             = 'SQLENGINE,AS,RS,IS'
+            InstanceName         = 'SQL2012'
+            SourcePath           = '\\files.company.local\images\SQL2012'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlWindowsFirewall 'Create_FirewallRules_For_SQL2016'
+        {
+            Ensure           = 'Present'
+            Features         = 'SQLENGINE'
+            InstanceName     = 'SQL2016'
+            SourcePath       = '\\files.company.local\images\SQL2016'
+
+            SourceCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to remove the default rules for the supported features.
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlWindowsFirewall 'Remove_FirewallRules_For_SQL2012'
+        {
+            Ensure               = 'Absent'
+            Features             = 'SQLENGINE,AS,RS,IS'
+            InstanceName         = 'SQL2012'
+            SourcePath           = '\\files.company.local\images\SQL2012'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlWindowsFirewall 'Remove_FirewallRules_For_SQL2016'
+        {
+            Ensure           = 'Absent'
+            Features         = 'SQLENGINE'
+            InstanceName     = 'SQL2016'
+            SourcePath       = '\\files.company.local\images\SQL2016'
+
+            SourceCredential = $SqlAdministratorCredential
+        }
+    }
+}
+

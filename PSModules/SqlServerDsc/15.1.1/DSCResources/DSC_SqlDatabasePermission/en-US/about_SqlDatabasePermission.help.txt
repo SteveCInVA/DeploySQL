@@ -1,0 +1,217 @@
+.NAME
+    SqlDatabasePermission
+
+.DESCRIPTION
+    The SqlDatabasePermission DSC resource is used to grant, deny or revoke
+    permissions for a user in a database. For more information about permissions,
+    please read the article https://docs.microsoft.com/en-us/sql/relational-databases/security/permissions-database-engine.
+
+    >Note: When revoking permission with PermissionState 'GrantWithGrant', both the
+    >grantee and all the other users the grantee has granted the same permission to,
+    >will also get their permission revoked.
+
+    Valid permission names can be found in the article https://docs.microsoft.com/en-us/dotnet/api/microsoft.sqlserver.management.smo.databasepermissionset#properties.
+
+    ## Requirements
+
+    * Target machine must be running Windows Server 2012 or later.
+    * Target machine must be running SQL Server Database Engine 2012 or later.
+
+    ## Known issues
+
+    All issues are not listed here, see https://github.com/dsccommunity/SqlServerDsc/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+SqlDatabasePermission.
+
+.PARAMETER DatabaseName
+    Key - String
+    The name of the database.
+
+.PARAMETER Name
+    Key - String
+    The name of the user that should be granted or denied the permission.
+
+.PARAMETER PermissionState
+    Key - String
+    Allowed values: Grant, Deny, GrantWithGrant
+    The state of the permission.
+
+.PARAMETER InstanceName
+    Key - String
+    The name of the SQL Server instance to be configured. Default value is 'MSSQLSERVER'.
+
+.PARAMETER Permissions
+    Required - StringArray
+    The permissions to be granted or denied for the user in the database.
+
+.PARAMETER Ensure
+    Write - String
+    Allowed values: Present, Absent
+    If the permission should be granted ('Present') or revoked ('Absent').
+
+.PARAMETER ServerName
+    Write - String
+    The host name of the SQL Server to be configured. Default value is the current computer name.
+
+.EXAMPLE 1
+
+This example shows how to ensure that the user account CONTOSO\SQLAdmin
+has "Connect" and "Update" SQL Permissions for database "AdventureWorks".
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabasePermission 'Grant_SqlDatabasePermissions_SQLAdmin_Db01'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Grant'
+            Permissions          = @('Connect', 'Update')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabasePermission 'Grant_SqlDatabasePermissions_SQLUser_Db01'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLUser'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Grant'
+            Permissions          = @('Connect', 'Update')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabasePermission 'Grant_SqlDatabasePermissions_SQLAdmin_Db02'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorksLT'
+            PermissionState      = 'Grant'
+            Permissions          = @('Connect', 'Update')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 2
+
+This example shows how to ensure that the user account CONTOSO\SQLAdmin
+hasn't "Select" and "Create Table" SQL Permissions for database "AdventureWorks".
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabasePermission 'RevokeGrant_SqlDatabasePermissions_SQLAdmin'
+        {
+            Ensure               = 'Absent'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Grant'
+            Permissions          = @('Connect', 'Update')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabasePermission 'RevokeDeny_SqlDatabasePermissions_SQLAdmin'
+        {
+            Ensure               = 'Absent'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Deny'
+            Permissions          = @('Select', 'CreateTable')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
+.EXAMPLE 3
+
+This example shows how to ensure that the user account CONTOSO\SQLAdmin
+has "Connect" and "Update" SQL Permissions for database "AdventureWorks".
+
+Configuration Example
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $SqlAdministratorCredential
+    )
+
+    Import-DscResource -ModuleName 'SqlServerDsc'
+
+    node localhost
+    {
+        SqlDatabasePermission 'Deny_SqlDatabasePermissions_SQLAdmin_Db01'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Deny'
+            Permissions          = @('Select', 'CreateTable')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabasePermission 'Deny_SqlDatabasePermissions_SQLUser_Db01'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLUser'
+            DatabaseName         = 'AdventureWorks'
+            PermissionState      = 'Deny'
+            Permissions          = @('Select', 'CreateTable')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlDatabasePermission 'Deny_SqlDatabasePermissions_SQLAdmin_Db02'
+        {
+            Ensure               = 'Present'
+            Name                 = 'CONTOSO\SQLAdmin'
+            DatabaseName         = 'AdventureWorksLT'
+            PermissionState      = 'Deny'
+            Permissions          = @('Select', 'CreateTable')
+            ServerName           = 'sqltest.company.local'
+            InstanceName         = 'DSC'
+
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+    }
+}
+
