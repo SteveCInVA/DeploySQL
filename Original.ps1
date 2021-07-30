@@ -270,8 +270,8 @@
  #Configure optical drive as V:\ 
  OpticalDiskDriveLetter CDRom 
  {
- DiskId = 1 
- DriveLetter = 
+ DiskId = 1, 
+ DriveLetter = 'V'
  } 
  #Configure Drive 1 for SQL System db's and binaries 
  WaitForDisk Diskl 
@@ -284,7 +284,7 @@
  Disk DVolume 
 { 
  DiskId = 1 
- DriveLetter = 
+ DriveLetter = 'D'
  FSLabel = 'SQLSystem' 
  AllocationUnitSize = 64KB 
  DependsOn = '[WaitForDisk]Diskl' 
@@ -412,7 +412,7 @@ DestinationPath = 'E:\SQLData'
  OpticalDiskDriveLetter CDRom 
 { 
  DiskId = 1 
- DriveLetter = 
+ DriveLetter = 'V'
  } 
  #Configure Drive 1 for SQL System db's and binaries 
  WaitForDisk Diskl 
