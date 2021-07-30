@@ -27,7 +27,7 @@
  
  For questions or issues please contact 
  
- .PARAMETER 
+ .INPUTS
  
  -Computer <string> - Defaults to localhost 
  
@@ -141,7 +141,7 @@ catch {
 } 
  
 # check install credential is valid 
-IF ($InstallCredential -eq $null) { 
+IF ($null -eq $InstallCredential) { 
     Write-Warning "User clicked cancel at credential prompt." 
     Break 
 } 
@@ -161,7 +161,7 @@ ELSE {
         break 
     } 
     Else { 
-        if ($domain.Name -eq $null) { 
+        if ($null -eq $domain.Name) { 
             Write-Warning "Unable to authenticate '$username'" 
             break 
         } 
