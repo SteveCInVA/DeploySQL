@@ -1,0 +1,5 @@
+# ignore any install media file
+InstallMedia/**
+
+#except the readme doc
+!**/CU and SPs go here.txt

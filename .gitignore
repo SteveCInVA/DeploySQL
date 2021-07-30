@@ -1,0 +1,4 @@
+
+InstallMedia/**
+!InstallMedia/**/*.txt
+

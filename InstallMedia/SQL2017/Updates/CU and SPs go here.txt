@@ -1,0 +1,5 @@
+All media should be unpacked...
+All required  Service Packs / Cumulative Updates should be placed in this folder.
+
+SQL 2017 Latest CU's found at:
+https://www.microsoft.com/en-us/download/details.aspx?id=56128

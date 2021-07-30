@@ -1,0 +1,5 @@
+All media should be unpacked...
+All required  Service Packs / Cumulative Updates should be placed in this folder.
+
+SQL Server 2016 Latest Service Pack / Cumulative updates found here:
+https://www.microsoft.com/en-us/download/details.aspx?id=56975
