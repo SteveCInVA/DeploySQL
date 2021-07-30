@@ -270,7 +270,7 @@
  #Configure optical drive as V:\ 
  OpticalDiskDriveLetter CDRom 
  {
- DiskId = 1, 
+ DiskId = 1 
  DriveLetter = 'V'
  } 
  #Configure Drive 1 for SQL System db's and binaries 
@@ -569,18 +569,18 @@ NTFSAccessEntry SQLSystemFarmAdmins
  Path = 'D:\SQLSystem' 
  AccessControlList = @( 
  NTFSAccessControlList 
-{ 
- Principal = "$DBAOSAdminGroup" 
- ForcePrincipal = $true 
- AccessControlEntry = @( 
- NTFSAccessControlEntry 
-{ 
- AccessControlType = 'Allow' 
- FileSystemRights = 'FullControl' 
- Inheritance = 'This folder subfolders and files' 
- Ensure = 'Present' 
-} 
-} 
+    { 
+    Principal = "$DBAOSAdminGroup" 
+    ForcePrincipal = $true 
+    AccessControlEntry = @( 
+    NTFSAccessControlEntry 
+        { 
+        AccessControlType = 'Allow' 
+        FileSystemRights = 'FullControl' 
+        Inheritance = 'This folder subfolders and files' 
+        Ensure = 'Present' 
+        } 
+    )
 } 
  ) 
  Force = $False 
@@ -713,7 +713,7 @@ NTFSAccessEntry SQLSystemFarmAdmins
 } 
  
  # Setup our configuration data object that will be used by our DSC configurations 
- $config = @( 
+ $config = @{ 
  AllNodes = @( 
  @{ 
  NodeName = '*'
@@ -739,7 +739,7 @@ NTFSAccessEntry SQLSystemFarmAdmins
  foreach($p in $pSessions){ 
 
  #Set the execution policy for all the targets in case it's disabled. User rights assignment makes a call to external scripts 
- Invoke-Command -session $p -ScriptBlock {Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force) 
+ Invoke-Command -session $p -ScriptBlock {Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force} 
 }
  
  #Install Required PsDSCModules 
