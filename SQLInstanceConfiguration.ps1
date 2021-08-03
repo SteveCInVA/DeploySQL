@@ -27,7 +27,7 @@ Import-Module -Name dbatools
 Set-DbaStartupParameter -SQLInstance $SqlSvrInstance -TraceFlag 3625 -TraceFlagOverride -Confirm:Sfalse -Force 
  
 #Rename the SA Account 
-Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -Query "IF EXISTS (SELECT name FROM sys.sql logins WHERE name = 'sa') BEGIN ALTER LOGIN sa WITH NAME = [xAdmin] END" 
+Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -Query "IF EXISTS (SELECT name FROM sys.sql_logins WHERE name = 'sa') BEGIN ALTER LOGIN sa WITH NAME = [xAdmin] END" 
  
 #ensure renamed SA account is disabled 
 Set-DbaLogin -SQLInstance $SqlSvrInstance -Login xAdmin -Disable 
@@ -65,7 +65,7 @@ Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$Inst
 Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\SQLScripts\MaintenanceSolution-Scheduling.sql" 
  
 #install who is active 
-Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\SQLScripts\who is active v11 32.sql" 
+Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\SQLScripts\who is active.sql" 
  
 #install sp_blitz 
 Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\SQLScripts\sp Blitz.sql" 
