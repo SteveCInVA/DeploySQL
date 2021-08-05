@@ -7,9 +7,9 @@ Scheduling of MaintenanceSolution.SQL
 -- Weekly System database ingegrity checks - Saturday at 01:05AM 
 
 -- Weekly full user database backups - Sunday at 12:05AM 
--- User databases - Differential backups Mon-Sat @ 12:05AM 
--- User Databases - Transaction log backups - Daily - Every hour 
--- User Databases - Index Optimize - Daily @ 1:30AM 
+-- USER_DATABASES - Differential backups Mon-Sat @ 12:05AM 
+-- USER_DATABASES - Transaction log backups - Daily - Every hour 
+-- USER_DATABASES - Index Optimize - Daily @ 1:30AM 
 -- Weekly User database ingegrity checks - Saturday at 2:00AM 
 
 -- Command Log Cleanup - Daily @ 12:00AM 
@@ -20,7 +20,7 @@ Scheduling of MaintenanceSolution.SQL
  
 DECLARE @ErrorMessage nvarchar(max) 
  
-IF NOT EXISTS(SELECT * FROM master.sys.objects WHERE name = 'commandlog' AND type_desc = 'user table') 
+IF NOT EXISTS(SELECT * FROM master.sys.objects WHERE name = 'commandlog' AND type_desc = 'user_table') 
 BEGIN 
 SET @ErrorMessage = 'This configuration script must be executed after installation of SQL Server Maintenance Solution.' 
 RAISERROR(@ErrorMessage, 16, 1) WITH NOWAIT 
@@ -36,10 +36,10 @@ USE [msdb]
 GO 
 -- Daily System database backups - Daily at 12:05AM 
 IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules
-    WHERE name = 'System Databases - Backup') 
+    WHERE name = 'SYSTEM_DATABASES - Backup') 
 BEGIN 
 DECLARE @schedule_id int 
-EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES - FULL', @name=N'System Databases - Backup', 
+EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM_DATABASES - FULL', @name=N'SYSTEM_DATABASES - Backup', 
  @enabled=1, 
  @freq_type=4, 
  @freq_interval=1, 
@@ -47,7 +47,7 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  @freq_subday_interval=0, 
  @freq_relative_interval=0, 
  @freq_recurrence_factor=1, 
- @active_start_date=0210308, 
+ @active_start_date=20210308, 
  @active_end_date=99991231, 
  @active_start_time=500, 
  @active_end_time=235959, @schedule_id = @schedule_id OUTPUT 
@@ -58,7 +58,7 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  WHERE name = 'User Database - Full Backup') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - USER DATABASES - FULL', @name=N'User Database - Full Backup', 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - USER_DATABASES - FULL', @name=N'User Database - Full Backup', 
  @enabled=1, 
  @freq_type=4, 
  @freq_interval=1, 
@@ -72,12 +72,12 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  @active_end_time=235959, @schedule_id = @schedule_id OUTPUT 
  END 
  GO 
- -- User databases - Differential backups Mon-Sat @ 12:05AM 
+ -- USER_DATABASES - Differential backups Mon-Sat @ 12:05AM 
  IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules 
      WHERE name = 'User Database - Diff Backup') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name='DatabaseBackup - USER DATABASES - DIFF', @name=N'User Database - Diff Backup', 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name='DatabaseBackup - USER_DATABASES - DIFF', @name=N'User Database - Diff Backup', 
  @enabled=1, 
  @freq_type=8, 
  @freq_interval=126, 
@@ -86,17 +86,17 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  @freq_relative_interval=0, 
  @freq_recurrence_factor=1, 
  @active_start_date=20210308, 
- @active_end_date= 9991231, 
+ @active_end_date=99991231, 
  @active_start_time=500, 
  @active_end_time= 235959, @schedule_id = @schedule_id OUTPUT 
  END 
  GO 
- -- User Databases - Transaction log backups - Daily - Every hour 
+ -- USER_DATABASES - Transaction log backups - Daily - Every hour 
  IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules 
  WHERE name = 'User Database - Transaction Logs') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - USER DATABASES - LOG', @name=N'User Database - Transaction Logs', 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - USER_DATABASES - LOG', @name=N'User Database - Transaction Logs', 
  @enabled=1, 
  @freq_type=4, 
  @freq_interval=1, 
@@ -110,12 +110,12 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  @active_end_time=235959, @schedule_id = @schedule_id OUTPUT 
  END 
  GO 
- -- User Databases - Index Optimize - Daily @ 1:30AM 
+ -- USER_DATABASES - Index Optimize - Daily @ 1:30AM 
  IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules 
- WHERE name = 'User Databases - Index Optimize') 
+ WHERE name = 'USER_DATABASES - Index Optimize') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name=N'IndexOptimize - USER DATABASES', @name=N'User Databases - Index Optimize', 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'IndexOptimize - USER_DATABASES', @name=N'USER_DATABASES - Index Optimize', 
  @enabled=1, 
  @freq_type=4, 
  @freq_interval=1, 
@@ -131,11 +131,11 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  GO 
  -- Weekly User database ingegrity checks - Saturday at 2:00AM 
  IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules 
- WHERE name = 'User Databases - IntegrityCheck') 
+ WHERE name = 'USER_DATABASES - IntegrityCheck') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseIntegrityCheck USER DATABASES', @name=N'User Databases - IntegrityCheck', 
- @enabled=l, 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseIntegrityCheck - USER_DATABASES', @name=N'USER_DATABASES - IntegrityCheck', 
+ @enabled=1, 
  @freq_type=8, 
  @freq_interval=64, 
  @freq_subday_type=1, 
@@ -150,10 +150,10 @@ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseBackup - SYSTEM DATABASES -
  GO 
  -- Weekly System database ingegrity checks - Saturday at 01:05AM 
  IF NOT EXISTS(SELECT * FROM msdb.dbo.sysschedules 
- WHERE name = 'System Databases - IntegrityCheck') 
+ WHERE name = 'SYSTEM_DATABASES - IntegrityCheck') 
  BEGIN 
  DECLARE @schedule_id int 
- EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseIntegrityCheck SYSTEM DATABASES', @name=N'System Databases - IntegrityCheck', 
+ EXEC msdb.dbo.sp_add_jobschedule @job_name=N'DatabaseIntegrityCheck - SYSTEM_DATABASES', @name=N'SYSTEM_DATABASES - IntegrityCheck', 
  @enabled=1, 
  @freq_type=8, 
  @freq_interval=64, 

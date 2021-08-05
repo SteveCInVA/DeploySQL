@@ -33,12 +33,12 @@ end
 -- backup will be deleted prior to next backup being taken to save space 
 -------------------------------------------
 
-EXEC msdb.dbo.sp_update_jobstp 
-@job_name=N'DatabaseBackup - SYSTEM DATABASES - FULL' 
+EXEC msdb.dbo.sp_update_jobstep 
+@job_name=N'DatabaseBackup - SYSTEM_DATABASES - FULL' 
 ,@step_id=1
-,@step_name=N'DatabaseBackup - SYSTEM DATABASES - FULL' 
+,@step_name=N'DatabaseBackup - SYSTEM_DATABASES - FULL' 
 ,@command='EXECUTE [dbo].[DatabaseBackup] 
-@Databases = ''SYSTEM DATABASES'', 
+@Databases = ''SYSTEM_DATABASES'', 
 @Directory = NULL, 
 @BackupType - ''FULL'', 
 @Verify = ''N'', 
@@ -51,12 +51,12 @@ EXEC msdb.dbo.sp_update_jobstp
 --Update User-Database full backups - keep for 7 days 
 -- backup will be deleted . prior to next backup being taken to save space 
 -------------------------------------------
-EXEC msdb.dbo.sp_update_jobstp 
-@job_name=N'DatabaseBackup - USER DATABASES - FULL' 
+EXEC msdb.dbo.sp_update_jobstep 
+@job_name=N'DatabaseBackup - USER_DATABASES - FULL' 
 ,@step_id=1
-,@step_name=N'DatabaseBackup - USER DATABASES - FULL' 
+,@step_name=N'DatabaseBackup - USER_DATABASES - FULL' 
 ,@command=N'EXECUTE [dbo].[DatabaseBackup] 
-@Databases = ''USER DATABASES'', 
+@Databases = ''USER_DATABASES'', 
 @Directory = NULL, 
 @BackupType = ''FULL'', 
 @Verify = ''N'', 
@@ -70,11 +70,11 @@ EXEC msdb.dbo.sp_update_jobstp
 -- backup will be deleted prior to next backup being taken to save space 
 -------------------------------------------
 EXEC msdb.dbo.sp_update_jobstep 
-@job_name=N'DatabaseBackup - USER DATABASES - DIFF' 
+@job_name=N'DatabaseBackup - USER_DATABASES - DIFF' 
 ,@step_id=1 
-,@step_name=N'DatabaseBackup - USER DATABASES - DIFF' 
+,@step_name=N'DatabaseBackup - USER_DATABASES - DIFF' 
 ,@command=N'EXECUTE [dbo].[DatabaseBackup] 
-@Databases = ''USER DATABASES'', 
+@Databases = ''USER_DATABASES'', 
 @Directory = NULL, 
 @BackupType = ''DIFF'', 
 @Verify = ''N'', 
@@ -87,12 +87,12 @@ EXEC msdb.dbo.sp_update_jobstep
 --Update User-Database tlog backups - keep for 7 days 
 -- backup will be deleted prior to next backup being taken to save space 
 -------------------------------------------
-EXEC msdb.dbo.sp_update_jobstp 
-@job_name=N'DatabaseBackup - USER DATABASES - LOG' 
+EXEC msdb.dbo.sp_update_jobstep 
+@job_name=N'DatabaseBackup - USER_DATABASES - LOG' 
 ,@step_id=1 
-,@step_name=N'DatabaseBackup - USER DATABASES LOG' 
+,@step_name=N'DatabaseBackup - USER_DATABASES LOG' 
 ,@command=N'EXECUTE [dbo].[DatabaseBackup] 
-@Databases = ''USER DATABASES'', 
+@Databases = ''USER_DATABASES'', 
 @Directory = NULL, 
 @BackupType = ''LOG'', 
 @Verify = ''N'', 
@@ -102,12 +102,12 @@ EXEC msdb.dbo.sp_update_jobstp
 @LogToTable = ''Y''' 
 
 -------------------------------------------
---Update fragmented user databases & update statistics 
+--Update fragmented USER_DATABASES & update statistics 
 -------------------------------------------
 EXEC msdb.dbo.sp_update_jobstep 
-@job_name=N'IndexOptimize - USER DATABASES' 
+@job_name=N'IndexOptimize - USER_DATABASES' 
 ,@step_id=1 
-,@step_name=N'IndexOptimize - USER DATABASES' 
+,@step_name=N'IndexOptimize - USER_DATABASES' 
 ,@command=N'EXECUTE [dbo].[IndexOptimize] 
 @Databases = ''USER_DATABASES'', 
 @LogToTable = ''Y'', 
@@ -124,11 +124,11 @@ EXEC msdb.dbo.sp_update_jobstep
 -- Configure System Database integrity check 
 -------------------------------------------
 EXEC msdb.dbo.sp_update_jobstep 
-@job_name=N'DatabaseIntegrityCheck - SYSTEM DATABASES', 
+@job_name=N'DatabaseIntegrityCheck - SYSTEM_DATABASES', 
 @step_id=1, 
-@step_name=N'DatabaseIntegrityCheck - SYSTEM DATABASES', 
+@step_name=N'DatabaseIntegrityCheck - SYSTEM_DATABASES', 
 @command=N'EXECUTE [dbo].[DatabaseIntegrityCheck] 
-@Databases = ''SYSTEM DATABASES'', 
+@Databases = ''SYSTEM_DATABASES'', 
 @CheckCommands = ''CHECKDB'', 
 @LogToTable = ''Y''' 
 
@@ -136,17 +136,17 @@ EXEC msdb.dbo.sp_update_jobstep
 -- Configure User Database integrity check 
 -------------------------------------------
 EXEC msdb.dbo.sp_update_jobstep 
-@job_name=N'DatabaseIntegrityCheck - USER DATABASES', 
+@job_name=N'DatabaseIntegrityCheck - USER_DATABASES', 
 @step_id=1, 
-@step_name=N'DatabaseIntegrityCheck - USER DATABASES', 
+@step_name=N'DatabaseIntegrityCheck - USER_DATABASES', 
 @command=N'EXECUTE [dbo].[DatabaseIntegrityCheck] 
-@Databases = ''USER DATABASES'', 
+@Databases = ''USER_DATABASES'', 
 @CheckCommands = ''CHECKDB'', 
 @LogToTable = ''Y''' 
 
 -------------------------------------------
--- Disable - USER DATABASES - DIRE Job 
+-- Disable - USER_DATABASES - DIFF Job 
 -------------------------------------------
 EXEC msdb.dbo.sp_update_job 
-@job_name=N'DatabaseBackup - USER DATABASES - DIFF' 
+@job_name=N'DatabaseBackup - USER_DATABASES - DIFF' 
 ,@enabled= 0
