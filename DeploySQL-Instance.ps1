@@ -125,7 +125,7 @@ else {
 #check DBA OS Admin Group exists 
 $usrDomain = $env:USERDOMAIN.ToUpper()
 Try { 
-   $r = get-adgroup -Identity $DBAOSAdminGroup.ToUpper().Replace("$usrDomain\", "") 
+   get-adgroup -Identity $DBAOSAdminGroup.ToUpper().Replace("$usrDomain\", "") > $null
 } 
 catch { 
    Write-Warning $_.exception.Message 
@@ -134,7 +134,7 @@ catch {
 
 #check DBA SQL Admin Group exists 
 Try { 
-   $r = get-adgroup -Identity $DBASQLAdminGroup.ToUpper().Replace("$usrDomain\", "") 
+   get-adgroup -Identity $DBASQLAdminGroup.ToUpper().Replace("$usrDomain\", "") > $null
 } 
 catch { 
    Write-Warning $_.exception.Message 
