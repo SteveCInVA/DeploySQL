@@ -123,8 +123,9 @@ else {
 } 
 
 #check DBA OS Admin Group exists 
+$usrDomain = $env:USERDOMAIN.ToUpper()
 Try { 
-   $r = get-adgroup -Identity $DBAOSAdminGroup.Replace("$env:USERDOMAIN\", "") 
+   $r = get-adgroup -Identity $DBAOSAdminGroup.ToUpper().Replace("$usrDomain\", "") 
 } 
 catch { 
    Write-Warning $_.exception.Message 
@@ -133,7 +134,7 @@ catch {
 
 #check DBA SQL Admin Group exists 
 Try { 
-   $r = get-adgroup -Identity $DBASQLAdminGroup.Replace("$env:USERDOMAIN\", "") 
+   $r = get-adgroup -Identity $DBASQLAdminGroup.ToUpper().Replace("$usrDomain\", "") 
 } 
 catch { 
    Write-Warning $_.exception.Message 
@@ -676,8 +677,8 @@ foreach ($p in $pSessions) {
 
 #Install Required PsDSCModules 
 InstallRequiredPSModules -ConfigurationData $config -OutputPath "$Dir\MOF\InstallPSModules" 
-Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force CimSession $cSessions -ErrorAction SilentlyContinue 
-Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force CimSession $cSessions -ErrorAction Stop 
+Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction SilentlyContinue 
+Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction Stop 
 
 #Configure LCM 
 LCMConfig -ConfigurationData $config -OutputPath "$Dir\MOF\LCMConfig" 

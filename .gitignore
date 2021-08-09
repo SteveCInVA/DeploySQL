@@ -2,3 +2,4 @@
 InstallMedia/**
 !InstallMedia/**/*.txt
 
+MOF/**
