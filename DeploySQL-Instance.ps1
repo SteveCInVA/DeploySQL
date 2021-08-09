@@ -44,6 +44,8 @@
  [-DBASQLAdminGroup <string>] - Active directory group used for administration of SQL Server databases and service. 
  
  [-SkipDriveConfig <boolean>] - Boolean value (True/False) to use to prevent initial drive configuration. Default is False. 
+
+ [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
  
  -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
@@ -100,6 +102,9 @@
    [Parameter (Mandatory = $false)] 
    [ValidateSet($false, $true)] 
    $SkipDriveConfig = $False, 
+
+   #Not yet implemented... planning for testing with azure
+   #[switch]$RunningInAzure,
 
    [Parameter (Mandatory = $false)] 
    [System.Management.Automation.PSCredential] 
@@ -186,6 +191,7 @@ $SkipDriveconfig = [System.Convert]::ToBoolean($SkipDriveConfig)
 #Configure DrivePath Variables 
 switch ($NumberOfNonOSDrives) { 
    1 { 
+       $SQLSystemDir = "D:\SQLSystem"
        $SQLUserDBDir = "D:\SQLData$InstancePath" 
        $SQLUserDBLogDir = "D:\SQLLogs$InstancePath" 
        $SQLTempDBDir = "D:\SQLTempDBs$InstancePath" 
@@ -193,6 +199,7 @@ switch ($NumberOfNonOSDrives) {
        $SQLBackupDir = "D:\SQLBackups$InstancePath" 
    } 
    5 { 
+       $SQLSystemDir = "D:\SQLSystem"
        $SQLUserDBDir = "E:\SQLData$InstancePath" 
        $SQLUserDBLogDir = "F:\SQLLogs$InstancePath" 
        $SQLTempDBDir = "G:\SQLTempDBs$InstancePath" 
@@ -462,7 +469,7 @@ Configuration InstallSQLEngine
            SourcePath            = "C:\Software\$SQLVersion" 
            Features              = 'SQLENGINE,CONN,BC' 
            SQLSysAdminAccounts   = "$DBASQLAdminGroup" 
-           InstallSQLDataDir     = 'D:\SQLSystem' 
+           InstallSQLDataDir     = "$SQLSystemDir" 
            SQLUserDBDir          = "$SQLUserDBDir" 
            SQLUserDBLogDir       = "$SQLUserDBLogDir" 
            SQLTempDBDir          = "$SQLTempDBDir" 
@@ -518,7 +525,7 @@ Configuration InstallSQLEngine
 
        #Grant DBATeam to file system 
        NTFSAccessEntry SQLSystemFarmAdmins { 
-           Path              = 'D:\SQLSystem' 
+           Path              = "$SQLSystemDir"
            AccessControlList = @( 
                NTFSAccessControlList { 
                    Principal          = "$DBAOSAdminGroup" 
