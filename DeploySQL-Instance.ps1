@@ -142,6 +142,14 @@ else {
 [string]$Dir = Split-Path $Scriptpath
 
 Import-Module $dir\helperFunctions\AccountVerification.psm1
+Import-Module $dir\helperFunctions\DirectoryVerification.psm1
+
+#check if basic directory structure is present
+if((Test-DirectoryStructure) -eq $false)
+{
+    write-warning "Key installation directories missing."
+    break
+}
 
 #check DBA OS Admin Group exists 
 foreach ($acct in $DBAOSAdminGroup)
