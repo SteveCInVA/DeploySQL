@@ -13,7 +13,7 @@ param (
    $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:username, $env:USERDOMAIN) 
 )
  
-If (Instance.Length -EQ 0) { 
+If ($Instance.Length -EQ 0) { 
    $SqlSvrInstance = $Computer 
    $Instance = 'MSSQLSERVER' 
 } 
@@ -24,7 +24,7 @@ else {
 Import-Module -Name dbatools 
  
 #Set Traceflaq 3625 (prevent showing information for failed logins) 
-Set-DbaStartupParameter -SQLInstance $SqlSvrInstance -TraceFlag 3625 -TraceFlagOverride -Confirm:Sfalse -Force 
+Set-DbaStartupParameter -SQLInstance $SqlSvrInstance -TraceFlag 3625 -TraceFlagOverride -Confirm:$false -Force 
  
 #Rename the SA Account 
 Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -Query "IF EXISTS (SELECT name FROM sys.sql_logins WHERE name = 'sa') BEGIN ALTER LOGIN sa WITH NAME = [xAdmin] END" 
@@ -39,7 +39,7 @@ Set-DbaMaxDOP -SQLInstance $SqlSvrInstance
 Set-DbaMaxMemory -SQLInstance $SqlSvrInstance 
  
 #Enable DAC 
-Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName RemoteDacConnectionsEnabled -Value 
+Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName RemoteDacConnectionsEnabled -Value 1
  
 #Enable backup compression 
 Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName DefaultBackupCompression -Value 1 
@@ -48,10 +48,10 @@ Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName DefaultBackupCompres
 Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName OptimizeAdhocWorkloads -Value 1 
  
 #Set maximum number of error logs 
-Set-DbaErrorLogConfig -SQLInstance $SqlSvrInstance -LogCount 
+Set-DbaErrorLogConfig -SQLInstance $SqlSvrInstance -LogCount 99
  
 #temp db configurations 
-$totalFiles = (Get-CimInstance -CimSession $c -ClassName Win32 ComputerSystem).Number0fLogicalProcessors 
+$totalFiles = (Get-CimInstance -CimSession $c -ClassName Win32_ComputerSystem).Number0fLogicalProcessors 
 if ($totalFiles -ge 8) { $totalFiles = 8 }
 $fileSize = (512 * $totalFiles) 
 Set-DbaTempDbConfig -SqlInstance $SqlSvrInstance -DataFileSize $fileSize -DataFileCount $totalFiles 
