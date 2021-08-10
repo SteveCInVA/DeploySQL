@@ -46,6 +46,7 @@
  [-SkipDriveConfig <boolean>] - Boolean value (True/False) to use to prevent initial drive configuration. Default is False. 
 
  [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
+ [-SkipPostDeployment] - switch that if included will not run post installation scripts
  
  -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
@@ -99,12 +100,12 @@
    [Parameter (Mandatory = $false)] 
    [string]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
 
-   [Parameter (Mandatory = $false)] 
-   [ValidateSet($false, $true)] 
-   $SkipDriveConfig = $False, 
+   [Switch]$SkipDriveConfig, 
 
    #Not yet implemented... planning for testing with azure
    #[switch]$RunningInAzure,
+
+   [Switch]$SkipPostDeployment,
 
    [Parameter (Mandatory = $false)] 
    [System.Management.Automation.PSCredential] 
@@ -184,9 +185,6 @@ IF (! (Test-Path $InstallSourcePath)) {
    Write-Warning "Unable to connect to $InstallSourcePath" 
    Break 
 } 
-
-#Convert passed parameter to expected boolean value 
-$SkipDriveconfig = [System.Convert]::ToBoolean($SkipDriveConfig) 
 
 #Configure DrivePath Variables 
 switch ($NumberOfNonOSDrives) { 
@@ -692,7 +690,7 @@ LCMConfig -ConfigurationData $config -OutputPath "$Dir\MOF\LCMConfig"
 Set-DscLocalConfigurationManager -Path "$Dir\MOF\LCMConfig" -CimSession $cSessions -Verbose -Force 
 
 #Configure Drives 
-IF ($SkipDriveConfig -eq $False) { 
+IF ($SkipDriveConfig.IsPresent -eq $False) { 
    switch ($NumberOfNonOSDrives) { 
        1 { 
            DriveConfigurationl -ConfigurationData $config -OutputPath "$Dir\MOF\DiskConfig" 
@@ -711,11 +709,13 @@ Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cS
 #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
 restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 
 
+if($SkipPostDeployment.IsPresent -eq $false)
+{
 #Run SQLInstanceConfiguration.ps1 
-If ($Instance.Length -EQ 0) { 
-   .\SQLInstanceConfiguration.ps1 -Computer $Computer -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+    If ($Instance.Length -EQ 0) { 
+       .\SQLInstanceConfiguration.ps1 -Computer $Computer -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+    }
+    else { 
+       .\SQLInstanceConfiguration.ps1 -Computer $Computer -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+    } 
 }
-else { 
-   .\SQLInstanceConfiguration.ps1 -Computer $Computer -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
-} 
- 
