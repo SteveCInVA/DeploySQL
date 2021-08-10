@@ -96,10 +96,16 @@
    [string]$InstallSourcePath = '\\server\ServerBuildScripts', 
 
    [Parameter (Mandatory = $false)] 
-   [string]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
+   [string]$SQLEngineServiceAccount, 
 
    [Parameter (Mandatory = $false)] 
-   [string]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
+   [string]$SQLAgentServiceAccount, 
+
+   [Parameter (Mandatory = $false)] 
+   [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
+
+   [Parameter (Mandatory = $false)] 
+   [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
 
    [Switch]$SkipDriveConfig, 
 
@@ -115,7 +121,7 @@
    $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
-$scriptVersion = '1.1.0' 
+$scriptVersion = '1.2.0' 
 $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
 
 IF ($Instance.Length -EQ 0) { 
@@ -131,25 +137,31 @@ else {
    $SvcName = "`$$Instance" 
 } 
 
+#Set working directory 
+[string]$Scriptpath = $MyInvocation.MyCommand.Path 
+[string]$Dir = Split-Path $Scriptpath
+
+Import-Module $dir\helperFunctions\AccountVerification.psm1
+
 #check DBA OS Admin Group exists 
-$usrDomain = $env:USERDOMAIN.ToUpper()
-Try { 
-   get-adgroup -Identity $DBAOSAdminGroup.ToUpper().Replace("$usrDomain\", "") > $null
-} 
-catch { 
-   Write-Warning $_.exception.Message 
-   Break 
-} 
+foreach ($acct in $DBAOSAdminGroup)
+{
+    if((Test-AccountExists -AccountName $acct) -eq $False)
+    {
+    write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
+    break
+    }
+}
 
 #check DBA SQL Admin Group exists 
-Try { 
-   get-adgroup -Identity $DBASQLAdminGroup.ToUpper().Replace("$usrDomain\", "") > $null
-} 
-catch { 
-   Write-Warning $_.exception.Message 
-   Break 
-} 
-
+foreach ($acct in $DBASQLAdminGroup)
+{
+    if((Test-AccountExists -AccountName $acct) -eq $False)
+    {
+    write-warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
+    break
+    }
+}
 # check install credential is valid 
 IF ($null -eq $InstallCredential) { 
    Write-Warning "User clicked cancel at credential prompt." 
@@ -207,11 +219,7 @@ switch ($NumberOfNonOSDrives) {
        $SQLTempDBLogDir = "G:\SQLTempDBs$InstancePath" 
        $SQLBackupDir = "H:\SQLBackups$InstancePath" 
    } 
-} 
-
-#Set working directory 
-[string]$Scriptpath = $MyInvocation.MyCommand.Path 
-[string]$Dir = Split-Path $Scriptpath 
+}  
 
 #Set dir to script location. 
 Set-Location $Dir 
@@ -477,7 +485,7 @@ Configuration InstallSQLEngine
            SQLTempDBLogDir       = "$SQLTempDBLogDir" 
            SQLBackupDir          = "$SQLBackupDir" 
            UpdateEnabled         = $true 
-           UpdateSource          = "C:\Software\$SQLVersion\Updates" 
+           UpdateSource          = "C:\Software\$SQLVersion\Updates"            
            AgtSvcStartupType     = 'Automatic' 
            SqlSvcStartupType     = 'Automatic' 
            BrowserSvcStartupType = 'Automatic' 
