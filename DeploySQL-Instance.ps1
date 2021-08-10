@@ -47,6 +47,7 @@
 
  [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
  [-SkipPostDeployment] - switch that if included will not run post installation scripts
+ [-SkipReboot] - switch that if included will skip the reboot at the end of the cycle
  
  -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
@@ -106,6 +107,8 @@
    #[switch]$RunningInAzure,
 
    [Switch]$SkipPostDeployment,
+
+   [Switch]$SkipReboot,
 
    [Parameter (Mandatory = $false)] 
    [System.Management.Automation.PSCredential] 
@@ -706,8 +709,11 @@ IF ($SkipDriveConfig.IsPresent -eq $False) {
 InstallSQLEngine -ConfigurationData $config -OutputPath "$Dir\MOF\SQLConfig" 
 Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
-#reboot server on completion (wait for up to 30 minutes for powershell to be available) 
-restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 
+if($SkipReboot.IsPresent -eq $false)
+{
+    #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
+    restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 
+}
 
 if($SkipPostDeployment.IsPresent -eq $false)
 {
