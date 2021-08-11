@@ -141,8 +141,8 @@ else {
 [string]$Scriptpath = $MyInvocation.MyCommand.Path 
 [string]$Dir = Split-Path $Scriptpath
 
-Import-Module $dir\helperFunctions\AccountVerification.psm1
-Import-Module $dir\helperFunctions\DirectoryVerification.psm1
+Import-Module $dir\helperFunctions\AccountVerifications.psm1
+Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
 
 #check if basic directory structure is present
 if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion -verbose) -eq $false)
@@ -176,28 +176,12 @@ IF ($null -eq $InstallCredential) {
    Break 
 } 
 ELSE { 
-   Try { 
-       $username = $InstallCredential.Username 
-       $root = "LDAP://" + ([ADSI]'').distinguishedName 
-       $domain = New-Object System.DirectoryServices.DirectoryEntry($root, $username, $InstallCredential.GetNetworkCredential().Password) 
-   }
-   Catch { 
-       $_.Exception.message 
-       continue 
-   } 
-
-   If (!$domain) { 
-       Write-Warning "Unable to query LDAP domain" 
-       break 
-   } 
-   Else { 
-       if ($null -eq $domain.Name) { 
-           Write-Warning "Unable to authenticate '$username'" 
-           break 
-       } 
-   } 
+    if((Test-AccountCredential -Credential $InstallCredential -verbose) -eq $false)
+    {
+        write-warning "Unable to validate credential"
+        break
+    }
 } 
-
 
 IF (!(Test-Connection -ComputerName $Computer -Quiet)) { 
    Write-Warning "Unable to connect to $Computer" 
