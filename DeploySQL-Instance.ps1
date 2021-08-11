@@ -145,7 +145,7 @@ Import-Module $dir\helperFunctions\AccountVerification.psm1
 Import-Module $dir\helperFunctions\DirectoryVerification.psm1
 
 #check if basic directory structure is present
-if((Test-DirectoryStructure) -eq $false)
+if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion -verbose) -eq $false)
 {
     write-warning "Key installation directories missing."
     break
