@@ -124,6 +124,73 @@
 $scriptVersion = '1.2.0' 
 $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
 
+##########################################
+#begin validation of parameters
+
+#Set working directory 
+[string]$Scriptpath = $MyInvocation.MyCommand.Path 
+[string]$Dir = Split-Path $Scriptpath
+
+Import-Module $dir\helperFunctions\AccountVerifications.psm1
+Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
+
+#check if basic directory structure is present
+if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false)
+{
+    write-warning "Key installation directories missing."
+    $valid = $false
+}
+
+#check DBA OS Admin Group exists 
+foreach ($acct in $DBAOSAdminGroup)
+{
+    if((Test-AccountExists -AccountName $acct) -eq $False)
+    {
+    write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
+    $valid = $false
+    }
+}
+
+#check DBA SQL Admin Group exists 
+foreach ($acct in $DBASQLAdminGroup)
+{
+    if((Test-AccountExists -AccountName $acct) -eq $False)
+    {
+        write-warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
+        $valid = $false
+    }
+}
+
+# check install credential is valid 
+IF ($null -eq $InstallCredential) { 
+   Write-Warning "User clicked cancel at credential prompt." 
+   Break 
+} 
+ELSE { 
+    if((Test-AccountCredential -Credential $InstallCredential) -eq $false)
+    {
+        $valid = $false
+    }
+} 
+
+IF (!(Test-Connection -ComputerName $Computer -Quiet)) { 
+   Write-Warning "Unable to connect to $Computer" 
+   $valid = $false 
+} 
+
+IF (!(Test-Path $InstallSourcePath)) { 
+   Write-Warning "Unable to connect to $InstallSourcePath" 
+   $valid = $false
+} 
+
+##########################################
+# end of validations...  if any tests fail, quit
+if($valid -eq $false)
+{
+    break
+}
+
+#define instance dependent variables
 IF ($Instance.Length -EQ 0) { 
    $SQLInstance = 'MSSQLSERVER' 
    $InstancePath = '' 
@@ -135,62 +202,6 @@ else {
    $InstancePath = "\$Instance" 
    $FirewallSvc = "MSSQL`$$Instance" 
    $SvcName = "`$$Instance" 
-} 
-
-#Set working directory 
-[string]$Scriptpath = $MyInvocation.MyCommand.Path 
-[string]$Dir = Split-Path $Scriptpath
-
-Import-Module $dir\helperFunctions\AccountVerifications.psm1
-Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
-
-#check if basic directory structure is present
-if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion -verbose) -eq $false)
-{
-    write-warning "Key installation directories missing."
-    break
-}
-
-#check DBA OS Admin Group exists 
-foreach ($acct in $DBAOSAdminGroup)
-{
-    if((Test-AccountExists -AccountName $acct) -eq $False)
-    {
-    write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
-    break
-    }
-}
-
-#check DBA SQL Admin Group exists 
-foreach ($acct in $DBASQLAdminGroup)
-{
-    if((Test-AccountExists -AccountName $acct) -eq $False)
-    {
-    write-warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
-    break
-    }
-}
-# check install credential is valid 
-IF ($null -eq $InstallCredential) { 
-   Write-Warning "User clicked cancel at credential prompt." 
-   Break 
-} 
-ELSE { 
-    if((Test-AccountCredential -Credential $InstallCredential -verbose) -eq $false)
-    {
-        write-warning "Unable to validate credential"
-        break
-    }
-} 
-
-IF (!(Test-Connection -ComputerName $Computer -Quiet)) { 
-   Write-Warning "Unable to connect to $Computer" 
-   Break 
-} 
-
-IF (! (Test-Path $InstallSourcePath)) { 
-   Write-Warning "Unable to connect to $InstallSourcePath" 
-   Break 
 } 
 
 #Configure DrivePath Variables 

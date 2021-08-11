@@ -26,7 +26,7 @@ function Test-AccountExists
         }
     }
     catch{
-        Write-Verbose $_.Exception.Message
+        Write-warning $_.Exception.Message
         return $False
     }
 }
