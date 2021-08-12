@@ -175,10 +175,12 @@ ELSE {
     }
 } 
 
-IF (!(Test-Connection -ComputerName $Computer -Quiet)) { 
-   Write-Warning "Unable to connect to $Computer" 
-   $valid = $false 
-} 
+FOREACH($c in $Computer){
+    IF (!(Test-Connection -ComputerName $c -Quiet)) { 
+       Write-Warning "Unable to connect to $c" 
+       $valid = $false 
+    } 
+}
 
 IF (!(Test-Path $InstallSourcePath)) { 
    Write-Warning "Unable to connect to $InstallSourcePath" 
@@ -525,107 +527,116 @@ Configuration InstallSQLEngine
        } 
 
        #Grant DBATeam to file system 
-       <#
-       NTFSAccessEntry SQLSystemFarmAdmins { 
-           Path              = "$SQLSystemDir"
-           AccessControlList = @( 
-               NTFSAccessControlList { 
-                   Principal          = $DBAOSAdminGroup 
-                   ForcePrincipal     = $true 
-                   AccessControlEntry = @( 
-                       NTFSAccessControlEntry { 
-                           AccessControlType = 'Allow' 
-                           FileSystemRights  = 'FullControl' 
-                           Inheritance       = 'This folder subfolders and files' 
-                           Ensure            = 'Present' 
-                       } 
-                   )
-               } 
-           ) 
-           Force             = $False 
-           DependsOn         = '[SQLSetup]Instance' 
-       } 
+        NTFSAccessEntry SQLSystemFarmAdmins { 
+            Path              = "$SQLSystemDir"
+            AccessControlList = @( 
+                foreach($user in $DBAOSAdminGroup){
+                    NTFSAccessControlList { 
+                        Principal          = $user
+                        ForcePrincipal     = $true 
+                        AccessControlEntry = @( 
+                            NTFSAccessControlEntry { 
+                                AccessControlType = 'Allow' 
+                                FileSystemRights  = 'FullControl' 
+                                Inheritance       = 'This folder subfolders and files' 
+                                Ensure            = 'Present' 
+                            } 
+                        )
+                    }
+                } 
+            ) 
+            Force             = $False 
+            DependsOn         = '[SQLSetup]Instance' 
+        } 
+       
+        NTFSAccessEntry SQLDataFarmAdmins { 
+            Path              = "$SQLUserDBDir" 
+            AccessControlList = @( 
+                foreach($user in $DBAOSAdminGroup){
+                    NTFSAccessControlList { 
+                        Principal          = $user
+                        ForcePrincipal     = $true 
+                        AccessControlEntry = @( 
+                            NTFSAccessControlEntry { 
+                                AccessControlType = 'Allow' 
+                                FileSystemRights  = 'FullControl' 
+                                Inheritance       = 'This folder subfolders and files' 
+                                Ensure            = 'Present' 
+                            } 
+                        )
+                    }
+                } 
+            ) 
+            Force             = $False 
+            DependsOn         = '[SQLSetup]Instance' 
+        }  
 
-       NTFSAccessEntry SQLDataFarmAdmins { 
-           Path              = "$SQLUserDBDir" 
-           AccessControlList = @( 
-               NTFSAccessControlList { 
-                   Principal          = $DBAOSAdminGroup 
-                   ForcePrincipal     = $true 
-                   AccessControlEntry = @( 
-                       NTFSAccessControlEntry { 
-                           AccessControlType = 'Allow' 
-                           FileSystemRights  = 'FullControl' 
-                           Inheritance       = 'This folder subfolders and files' 
-                           Ensure            = 'Present' 
-                       } 
-                   ) 
-               } 
-           ) 
-           Force             = $False 
-           DependsOn         = '[SQLSetup]Instance' 
-       } 
+        NTFSAccessEntry SQLLogsFarmAdmins { 
+            Path              = "$SQLUserDBLogDir" 
+            AccessControlList = @( 
+                foreach($user in $DBAOSAdminGroup){
+                    NTFSAccessControlList { 
+                        Principal          = $user
+                        ForcePrincipal     = $true 
+                        AccessControlEntry = @( 
+                            NTFSAccessControlEntry { 
+                                AccessControlType = 'Allow' 
+                                FileSystemRights  = 'FullControl' 
+                                Inheritance       = 'This folder subfolders and files' 
+                                Ensure            = 'Present' 
+                            } 
+                        )
+                    }
+                } 
+            ) 
+            Force             = $False 
+            DependsOn         = '[SQLSetup]Instance' 
+        } 
 
-       NTFSAccessEntry SQLLogsFarmAdmins { 
-           Path              = "$SQLUserDBLogDir" 
-           AccessControlList = @( 
-               NTFSAccessControlList { 
-                   Principal          = $DBAOSAdminGroup 
-                   ForcePrincipal     = $true 
-                   AccessControlEntry = @( 
-                       NTFSAccessControlEntry { 
-                           AccessControlType = 'Allow' 
-                           FileSystemRights  = 'FullControl' 
-                           Inheritance       = 'This folder subfolders and files' 
-                           Ensure            = 'Present' 
-                       } 
-                   ) 
-               } 
-           ) 
-           Force             = $False 
-           DependsOn         = '[SQLSetup]Instance' 
-       } 
+        NTFSAccessEntry SQLTempDBFarmAdmins { 
+            Path              = "$SQLTempDBDir" 
+            AccessControlList = @( 
+                foreach($user in $DBAOSAdminGroup){
+                    NTFSAccessControlList { 
+                        Principal          = $user
+                        ForcePrincipal     = $true 
+                        AccessControlEntry = @( 
+                            NTFSAccessControlEntry { 
+                                AccessControlType = 'Allow' 
+                                FileSystemRights  = 'FullControl' 
+                                Inheritance       = 'This folder subfolders and files' 
+                                Ensure            = 'Present' 
+                            } 
+                        )
+                    }
+                } 
+            ) 
+            Force             = $False 
+            DependsOn         = '[SQLSetup]Instance' 
+        } 
 
-       NTFSAccessEntry SQLTempDBFarmAdmins { 
-           Path              = "$SQLTempDBDir" 
-           AccessControlList = @( 
-               NTFSAccessControlList { 
-                   Principal          = $DBAOSAdminGroup
-                   ForcePrincipal     = $true 
-                   AccessControlEntry = @( 
-                       NTFSAccessControlEntry { 
-                           AccessControlType = 'Allow' 
-                           FileSystemRights  = 'FullControl' 
-                           Inheritance       = 'This folder subfolders and files' 
-                           Ensure            = 'Present' 
-                       } 
-                   ) 
-               } 
-           ) 
-           Force             = $False 
-           DependsOn         = '[SQLSetup]Instance' 
-       } 
-
-       NTFSAccessEntry SQLBackupsFarmAdmins { 
-           Path              = "$SQLBackupDir" 
-           AccessControlList = @(
-               NTFSAccessControlList { 
-                   Principal          = $DBAOSAdminGroup
-                   ForcePrincipal     = $true 
-                   AccessControlEntry = @( 
-                       NTFSAccessControlEntry { 
-                           AccessControlType = 'Allow' 
-                           FileSystemRights  = 'FullControl' 
-                           Inheritance       = 'This folder subfolders and files' 
-                           Ensure            = 'Present' 
-                       } 
-                   ) 
-               }
-           ) 
-           Force             = $False 
-           DependsOn         = '[SQLSetup]Instance' 
-       } 
-       #>
+        NTFSAccessEntry SQLBackupsFarmAdmins { 
+            Path              = "$SQLBackupDir" 
+            AccessControlList = @( 
+                foreach($user in $DBAOSAdminGroup){
+                    NTFSAccessControlList { 
+                        Principal          = $user
+                        ForcePrincipal     = $true 
+                        AccessControlEntry = @( 
+                            NTFSAccessControlEntry { 
+                                AccessControlType = 'Allow' 
+                                FileSystemRights  = 'FullControl' 
+                                Inheritance       = 'This folder subfolders and files' 
+                                Ensure            = 'Present' 
+                            } 
+                        )
+                    }
+                } 
+            ) 
+            Force             = $False 
+            DependsOn         = '[SQLSetup]Instance' 
+        } 
+    
        Registry VersionStamp { 
            Ensure    = "Present" 
            Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
@@ -651,12 +662,11 @@ Configuration InstallSQLEngine
            ValueName = "InstallParameters" 
            ValueData = @("Computer=$Computer", "Instance=$Instance", "SQLVersion=$SQLVersion", "NumberOfNonOSDrives=$NumberOfNonOSDrives", "InstallSourcePath=$InstallSourcePath", "DBAOSAdminGroup=$DBAOSAdminGrcup", "DBASQLAdminGroup=$DBASQLAdminGroup", "SkipDriveConfig=$SkipDriveConfig", "InstallCredential=$username") 
        } 
-
    } 
 } 
 
 [System.Collections.ArrayList]$s = $Computer
-$s = $s.Remove($Computer[0])
+$s.Remove($Computer[0])
 $p = $Computer[0]
 
 # Setup our configuration data object that will be used by our DSC configurations 
@@ -684,17 +694,10 @@ foreach($c in $s)
          }
 }
 
+#$config.AllNodes | out-string | write-host
+
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
-
-#Create array of PSSessions that will be used to prep our target nodes 
-$pSessions = New-PSSession -ComputerName $Computer -Credential $InstallCredential 
-
-#Copy dependencies to target nodes 
-foreach ($p in $pSessions) { 
-   #Set the execution policy for all the targets in case it's disabled. User rights assignment makes a call to external scripts 
-   Invoke-Command -session $p -ScriptBlock { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force } 
-}
 
 #Configure LCM 
 LCMConfig -ConfigurationData $config -OutputPath "$Dir\MOF\LCMConfig" 
@@ -717,16 +720,18 @@ Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cS
 if($SkipReboot.IsPresent -eq $false)
 {
     #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
-    restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 
+    restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 -Protocol WSMan
 }
 
 if($SkipPostDeployment.IsPresent -eq $false)
 {
-#Run SQLInstanceConfiguration.ps1 
-    If ($Instance.Length -EQ 0) { 
-       .\SQLInstanceConfiguration.ps1 -Computer $Computer -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+    foreach($c in $Computer){
+        #Run SQLInstanceConfiguration.ps1 
+        If ($Instance.Length -EQ 0) { 
+        .\SQLInstanceConfiguration.ps1 -Computer $c -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+        }
+        else { 
+        .\SQLInstanceConfiguration.ps1 -Computer $c -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+        } 
     }
-    else { 
-       .\SQLInstanceConfiguration.ps1 -Computer $Computer -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
-    } 
 }
