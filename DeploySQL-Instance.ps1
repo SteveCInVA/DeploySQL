@@ -79,7 +79,7 @@
  
  param ( 
    [Parameter (Mandatory = $true)] 
-   [string]$Computer = 'localhost', 
+   [string[]]$Computer = 'localhost', 
 
    [Parameter (Mandatory = $false)] 
    [string]$Instance, 
@@ -107,10 +107,11 @@
    [Parameter (Mandatory = $false)] 
    [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
 
+   [Switch]$HasOpticalDrive,
+
    [Switch]$SkipDriveConfig, 
 
-   #Not yet implemented... planning for testing with azure
-   #[switch]$RunningInAzure,
+   [switch]$IsAzureVM,
 
    [Switch]$SkipPostDeployment,
 
@@ -133,6 +134,7 @@ $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K"
 
 Import-Module $dir\helperFunctions\AccountVerifications.psm1
 Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
+Import-Module $dir\helperFunctions\Tools.psm1
 
 #check if basic directory structure is present
 if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false)
@@ -190,6 +192,10 @@ if($valid -eq $false)
     break
 }
 
+##########################################
+# ensure all psmodules exist in installing directory
+copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:ProgramFiles\WindowsPowerShell\Modules"
+
 #define instance dependent variables
 IF ($Instance.Length -EQ 0) { 
    $SQLInstance = 'MSSQLSERVER' 
@@ -204,25 +210,36 @@ else {
    $SvcName = "`$$Instance" 
 } 
 
+#array used to help determine drive letters
+$driveLetterArr=[char[]]([int][char]'A'..[int][char]'Z')
+
+#parameter used to handle the fact that azure VM's have a D: "Temporary Storage" disk presented
+if($IsAzureVM.IsPresent -eq $true){
+    $driveOffset = 1
+}
+else{
+    $driveOffset = 0
+}
+
 #Configure DrivePath Variables 
 switch ($NumberOfNonOSDrives) { 
-   1 { 
-       $SQLSystemDir = "D:\SQLSystem"
-       $SQLUserDBDir = "D:\SQLData$InstancePath" 
-       $SQLUserDBLogDir = "D:\SQLLogs$InstancePath" 
-       $SQLTempDBDir = "D:\SQLTempDBs$InstancePath" 
-       $SQLTempDBLogDir = "D:\SQLTempDBs$InstancePath" 
-       $SQLBackupDir = "D:\SQLBackups$InstancePath" 
-   } 
-   5 { 
-       $SQLSystemDir = "D:\SQLSystem"
-       $SQLUserDBDir = "E:\SQLData$InstancePath" 
-       $SQLUserDBLogDir = "F:\SQLLogs$InstancePath" 
-       $SQLTempDBDir = "G:\SQLTempDBs$InstancePath" 
-       $SQLTempDBLogDir = "G:\SQLTempDBs$InstancePath" 
-       $SQLBackupDir = "H:\SQLBackups$InstancePath" 
-   } 
-}  
+    1 { 
+        $SQLSystemDir = ($driveLetterArr[3+$driveOffset] + ":\SQLSystem")
+        $SQLUserDBDir = ($driveLetterArr[3+$driveOffset] + ":\SQLData$InstancePath")
+        $SQLUserDBLogDir = ($driveLetterArr[3+$driveOffset] + ":\SQLLogs$InstancePath") 
+        $SQLTempDBDir = ($driveLetterArr[3+$driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLTempDBLogDir = ($driveLetterArr[3+$driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLBackupDir = ($driveLetterArr[3+$driveOffset] + ":\SQLBackups$InstancePath") 
+    } 
+    5 { 
+        $SQLSystemDir = ($driveLetterArr[3+$driveOffset] +":\SQLSystem")
+        $SQLUserDBDir = ($driveLetterArr[4+$driveOffset] +":\SQLData$InstancePath") 
+        $SQLUserDBLogDir = ($driveLetterArr[5+$driveOffset] +":\SQLLogs$InstancePath") 
+        $SQLTempDBDir = ($driveLetterArr[6+$driveOffset] +":\SQLTempDBs$InstancePath") 
+        $SQLTempDBLogDir = ($driveLetterArr[6+$driveOffset] +":\SQLTempDBs$InstancePath") 
+        $SQLBackupDir = ($driveLetterArr[7+$driveOffset] +":\SQLBackups$InstancePath") 
+    } 
+ } 
 
 #Set dir to script location. 
 Set-Location $Dir 
@@ -261,167 +278,139 @@ Configuration LCMConfig
    } 
 } 
 
-#create configure 5 drive scenario 
-Configuration DriveConfiguration5 
+#create configure drives 
+Configuration DriveConfiguration 
 { 
    Import-DscResource -ModuleName PSDesiredStateConfiguration 
    Import-DscResource -ModuleName StorageDsc 
-   Import-DscResource -ModuleName AccessControlDSC 
-   Node $AllNodes.NodeName 
-   { 
-       #Configure optical drive as V:\ 
-       OpticalDiskDriveLetter CDRom {
-           DiskId      = 1 
-           DriveLetter = 'V'
-       } 
+      
+   Node $AllNodes.Where{$_.OpticalDrive -eq $true}.NodeName
+   {
+        #Configure optical drive as V:\ 
+        OpticalDiskDriveLetter CDRom {
+            DiskId      = 1 
+            DriveLetter = 'V'
+        } 
+   } 
+   
+   Node $AllNodes.NodeName
+   {
+       ###################################
        #Configure Drive 1 for SQL System db's and binaries 
-       WaitForDisk Diskl { 
-           DiskId           = 1 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
+       #This configuration is used in all setups
+       WaitForDisk Disk1 { 
+            DiskId           = 1 + $driveOffset 
+            RetryIntervalSec = 60 
+            RetryCount       = 60 
+        } 
 
-       Disk DVolume { 
-           DiskId             = 1 
-           DriveLetter        = 'D'
-           FSLabel            = 'SQLSystem' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Diskl' 
-       } 
+        Disk Disk1Volume { 
+            DiskId             = 1 + $driveOffset
+            DriveLetter        = $driveLetterArr[3+$driveOffset] #D Drive or E drive if in azure
+            FSLabel            = 'SQLSystem' 
+            AllocationUnitSize = 64KB 
+            DependsOn          = '[WaitForDisk]Disk1' 
+        } 
 
-       File SQLSystemFolder { 
-           DestinationPath = 'D:\SQLSystem' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]DVolume' 
-       } 
+        File SQLSystemFolder { 
+            DestinationPath = ($driveLetterArr[3+$driveOffset] + ":\SQLSystem")
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            DependsOn       = '[Disk]Disk1Volume' 
+        }       
+   }
 
+   Node $AllNodes.Where{$_.NumberOfDataDrives -eq '5'}.NodeName
+   {
+       ###################################
        #Configure Drive 2 for SQL Data 
        WaitForDisk Disk2 { 
-           DiskId           = 2 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
+            DiskId           = 2 + $driveOffset 
+            RetryIntervalSec = 60 
+            RetryCount       = 60 
+        } 
 
-       Disk EVolume { 
-           DiskId             = 2 
-           DriveLetter        = 'E' 
-           FSLabel            = 'SQLData' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Disk2' 
-       } 
+        Disk Disk2Volume { 
+            DiskId             = 2 + $driveOffset
+            DriveLetter        = $driveLetterArr[4+$driveOffset] #E Drive or F drive if in azure
+            FSLabel            = 'SQLData' 
+            AllocationUnitSize = 64KB 
+            DependsOn          = '[WaitForDisk]Disk2' 
+        } 
 
-       File SQLDataFolder { 
-           DestinationPath = 'E:\SQLData' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]EVolume' 
-       } 
+        File SQLDataFolder { 
+            DestinationPath = ($driveLetterArr[4+$driveOffset] + ":\SQLData")
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            DependsOn       = '[Disk]Disk2Volume' 
+        }     
+        ###################################
+        #Configure Drive 3 for SQL Logs  
+        WaitForDisk Disk3 { 
+            DiskId           = 3 + $driveOffset 
+            RetryIntervalSec = 60 
+            RetryCount       = 60 
+        } 
 
-       #Configure Drive 3 for SQL Log files 
-       WaitForDisk Disk3 { 
-           DiskId           = 3 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
+        Disk Disk3Volume { 
+            DiskId             = 3 + $driveOffset
+            DriveLetter        = $driveLetterArr[5+$driveOffset] #F Drive or G drive if in azure
+            FSLabel            = 'SQLLogs' 
+            AllocationUnitSize = 64KB 
+            DependsOn          = '[WaitForDisk]Disk3' 
+        } 
 
-       Disk FVolume { 
-           DiskId             = 3 
-           DriveLetter        = 'F' 
-           FSLabel            = 'SQLLogs' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Disk3' 
-       } 
+        File SQLLogsFolder { 
+            DestinationPath = ($driveLetterArr[5+$driveOffset] + ":\SQLLogs")
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            DependsOn       = '[Disk]Disk3Volume' 
+        }     
+        ###################################
+        #Configure Drive 4 for SQL TempDBs  
+        WaitForDisk Disk4 { 
+            DiskId           = 4 + $driveOffset 
+            RetryIntervalSec = 60 
+            RetryCount       = 60 
+        } 
 
-       File SQLLogsFolder { 
-           DestinationPath = 'F:\SQLLogs' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]FVolume' 
-       } 
+        Disk Disk4Volume { 
+            DiskId             = 4 + $driveOffset
+            DriveLetter        = $driveLetterArr[6+$driveOffset] #G Drive or H drive if in azure
+            FSLabel            = 'SQLTempDBs' 
+            AllocationUnitSize = 64KB 
+            DependsOn          = '[WaitForDisk]Disk4' 
+        } 
 
-       #Configure Drive 4 for SQL Temp DB files 
-       WaitForDisk Disk4 { 
-           DiskId           = 4 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
+        File SQLTempDBsFolder { 
+            DestinationPath = ($driveLetterArr[6+$driveOffset] + ":\SQLTempDBs")
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            DependsOn       = '[Disk]Disk4Volume' 
+        } 
+        ###################################
+        #Configure Drive 5 for SQL Backups  
+        WaitForDisk Disk5 { 
+            DiskId           = 5 + $driveOffset 
+            RetryIntervalSec = 60 
+            RetryCount       = 60 
+        } 
 
-       Disk GVolume { 
-           DiskId             = 4 
-           DriveLetter        = 'G' 
-           FSLabel            = 'SQLTempDBs' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Disk4' 
-       } 
+        Disk Disk5Volume { 
+            DiskId             = 5 + $driveOffset
+            DriveLetter        = $driveLetterArr[7+$driveOffset] #H Drive or I drive if in azure
+            FSLabel            = 'SQLBackups' 
+            AllocationUnitSize = 64KB 
+            DependsOn          = '[WaitForDisk]Disk5' 
+        } 
 
-       File SQLTempDBSFolder { 
-           DestinationPath = 'G:\SQLTempDBs' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]GVolume' 
-       } 
-
-       #Configure Drive 5 for SQL Backup files 
-       WaitForDisk Disk5 { 
-           DiskId           = 5 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
-
-       Disk HVolume { 
-           DiskId             = 5 
-           DriveLetter        = 'H' 
-           FSLabel            = 'SQLBackups' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Disk5' 
-       } 
-
-       File SQLBackupsFolder { 
-           DestinationPath = 'H:\SQLBackups' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]HVolume' 
-       } 
-   } 
-} 
-
-#create configure 1 drive scenario 
-Configuration DriveConfigurationl 
-{ 
-   Import-DscResource -ModuleName PSDesiredStateConfiguration 
-   Import-DscResource -ModuleName StorageDsc 
-   Import-DscResource -ModuleName AccessControlDSC 
-   Node $AllNodes.NodeName 
-   { 
-       #Configure optical drive as V:\ 
-       OpticalDiskDriveLetter CDRom { 
-           DiskId      = 1 
-           DriveLetter = 'V'
-       } 
-       #Configure Drive 1 for SQL System db's and binaries 
-       WaitForDisk Diskl { 
-           DiskId           = 1 
-           RetryIntervalSec = 60 
-           RetryCount       = 60 
-       } 
-
-       Disk DVolume { 
-           DiskId             = 1 
-           DriveLetter        = 
-           FSLabel = 'SQLSystem' 
-           AllocationUnitSize = 64KB 
-           DependsOn          = '[WaitForDisk]Diskl' 
-       } 
-
-       File SQLSystemFolder { 
-           DestinationPath = 'D:\SQLSystem' 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           DependsOn       = '[Disk]DVolume' 
-       } 
-
-   } 
+        File SQLBackupsFolder { 
+            DestinationPath = ($driveLetterArr[7+$driveOffset] + ":\SQLBackups")
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            DependsOn       = '[Disk]Disk5Volume' 
+        } 
+   }
 } 
 
 #create configuration for SQL Server 
@@ -480,7 +469,7 @@ Configuration InstallSQLEngine
            InstanceName          = $SQLInstance 
            SourcePath            = "C:\Software\$SQLVersion" 
            Features              = 'SQLENGINE,CONN,BC' 
-           SQLSysAdminAccounts   = "$DBASQLAdminGroup" 
+           SQLSysAdminAccounts   = @($DBASQLAdminGroup)
            InstallSQLDataDir     = "$SQLSystemDir" 
            SQLUserDBDir          = "$SQLUserDBDir" 
            SQLUserDBLogDir       = "$SQLUserDBLogDir" 
@@ -536,11 +525,12 @@ Configuration InstallSQLEngine
        } 
 
        #Grant DBATeam to file system 
+       <#
        NTFSAccessEntry SQLSystemFarmAdmins { 
            Path              = "$SQLSystemDir"
            AccessControlList = @( 
                NTFSAccessControlList { 
-                   Principal          = "$DBAOSAdminGroup" 
+                   Principal          = $DBAOSAdminGroup 
                    ForcePrincipal     = $true 
                    AccessControlEntry = @( 
                        NTFSAccessControlEntry { 
@@ -560,7 +550,7 @@ Configuration InstallSQLEngine
            Path              = "$SQLUserDBDir" 
            AccessControlList = @( 
                NTFSAccessControlList { 
-                   Principal          = "$DBAOSAdminGroup" 
+                   Principal          = $DBAOSAdminGroup 
                    ForcePrincipal     = $true 
                    AccessControlEntry = @( 
                        NTFSAccessControlEntry { 
@@ -580,7 +570,7 @@ Configuration InstallSQLEngine
            Path              = "$SQLUserDBLogDir" 
            AccessControlList = @( 
                NTFSAccessControlList { 
-                   Principal          = "$DBAOSAdminGroup" 
+                   Principal          = $DBAOSAdminGroup 
                    ForcePrincipal     = $true 
                    AccessControlEntry = @( 
                        NTFSAccessControlEntry { 
@@ -600,7 +590,7 @@ Configuration InstallSQLEngine
            Path              = "$SQLTempDBDir" 
            AccessControlList = @( 
                NTFSAccessControlList { 
-                   Principal          = "$DBAOSAdminGroup" 
+                   Principal          = $DBAOSAdminGroup
                    ForcePrincipal     = $true 
                    AccessControlEntry = @( 
                        NTFSAccessControlEntry { 
@@ -620,7 +610,7 @@ Configuration InstallSQLEngine
            Path              = "$SQLBackupDir" 
            AccessControlList = @(
                NTFSAccessControlList { 
-                   Principal          = "$DBAOSAdminGroup" 
+                   Principal          = $DBAOSAdminGroup
                    ForcePrincipal     = $true 
                    AccessControlEntry = @( 
                        NTFSAccessControlEntry { 
@@ -635,28 +625,28 @@ Configuration InstallSQLEngine
            Force             = $False 
            DependsOn         = '[SQLSetup]Instance' 
        } 
-
+       #>
        Registry VersionStamp { 
            Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\PESB Install\$SQLInstance" 
+           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
            ValueName = "InstallScriptVersion" 
            ValueData = "$scriptVersion" 
        } 
        Registry InstalledBy { 
            Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\PESB Install\$SQLInstance" 
+           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
            ValueName = "InstalledBy" 
            ValueData = "$env:username" 
        } 
        Registry InstalledDate { 
            Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\PESB Install\$SQLInstance" 
+           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
            ValueName = "InstalledDate" 
            ValueData = $InstallDate 
        } 
        Registry InstallParams { 
            Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\PESB_Install\$SQLInstance" 
+           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
            ValueType = "MultiString" 
            ValueName = "InstallParameters" 
            ValueData = @("Computer=$Computer", "Instance=$Instance", "SQLVersion=$SQLVersion", "NumberOfNonOSDrives=$NumberOfNonOSDrives", "InstallSourcePath=$InstallSourcePath", "DBAOSAdminGroup=$DBAOSAdminGrcup", "DBASQLAdminGroup=$DBASQLAdminGroup", "SkipDriveConfig=$SkipDriveConfig", "InstallCredential=$username") 
@@ -665,55 +655,59 @@ Configuration InstallSQLEngine
    } 
 } 
 
+[System.Collections.ArrayList]$s = $Computer
+$s = $s.Remove($Computer[0])
+$p = $Computer[0]
+
 # Setup our configuration data object that will be used by our DSC configurations 
 $config = @{ 
    AllNodes = @( 
        @{ 
-           NodeName                    = '*'
+           NodeName                    = $p
+           NodeType                    = 'Primary'
            PSDscAllowPlainTextPassword = $true 
            PsDscAllowDomainUser        = $true 
+           OpticalDrive = $HasOpticalDrive.IsPresent
+           NumberOfDataDrives = $NumberOfNonOSDrives
        }
    )
 } 
+foreach($c in $s)
+{
+    $config.AllNodes += @{
+            NodeName = $c 
+            NodeType = 'Secondary'
+            PSDscAllowPlainTextPassword = $true 
+            PsDscAllowDomainUser        = $true 
+            OpticalDrive = $HasOpticalDrive.IsPresent
+            NumberOfDataDrives = $NumberOfNonOSDrives
+         }
+}
 
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
-
-#Add each computer to the data object 
-foreach ($c in $cSessions) { 
-   $config.AllNodes += @{NodeName = $c.ComputerName } 
-} 
 
 #Create array of PSSessions that will be used to prep our target nodes 
 $pSessions = New-PSSession -ComputerName $Computer -Credential $InstallCredential 
 
 #Copy dependencies to target nodes 
 foreach ($p in $pSessions) { 
-
    #Set the execution policy for all the targets in case it's disabled. User rights assignment makes a call to external scripts 
    Invoke-Command -session $p -ScriptBlock { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force } 
 }
-
-#Install Required PsDSCModules 
-InstallRequiredPSModules -ConfigurationData $config -OutputPath "$Dir\MOF\InstallPSModules" 
-Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction SilentlyContinue 
-Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction Stop 
 
 #Configure LCM 
 LCMConfig -ConfigurationData $config -OutputPath "$Dir\MOF\LCMConfig" 
 Set-DscLocalConfigurationManager -Path "$Dir\MOF\LCMConfig" -CimSession $cSessions -Verbose -Force 
 
-#Configure Drives 
-IF ($SkipDriveConfig.IsPresent -eq $False) { 
-   switch ($NumberOfNonOSDrives) { 
-       1 { 
-           DriveConfigurationl -ConfigurationData $config -OutputPath "$Dir\MOF\DiskConfig" 
-       }
-       5 { 
-           DriveConfiguration5 -ConfigurationData $config -OutputPath "$Dir\MOF\DiskConfig" 
-       }
-   } 
-   Start-DscConfiguration -Path "$Dir\MOF\DiskConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+#Install Required PsDSCModules 
+InstallRequiredPSModules -ConfigurationData $config -OutputPath "$Dir\MOF\InstallPSModules" 
+Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction Stop 
+
+if($SkipDriveConfig.isPresent -eq $false){
+    #Configure Drives 
+    DriveConfiguration -ConfigurationData $config -OutputPath "$Dir\MOF\DiskConfig" 
+    Start-DscConfiguration -Path "$Dir\MOF\DiskConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 }
 
 #Install SQL 
