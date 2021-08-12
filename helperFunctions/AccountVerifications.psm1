@@ -12,7 +12,7 @@ function Test-AccountExists
 
     $domain = $ADDomain.ToUpper()
     $filter = $AccountName.ToUpper().Replace("$domain\","")
-    $filter = "CN=$filter"
+    $filter = "SAMAccountName=$filter"
     
     try{
         $r = Get-ADObject -LDAPFilter $filter

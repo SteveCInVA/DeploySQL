@@ -27,7 +27,7 @@
   
  .INPUTS
  
- -Computer <string> - Defaults to localhost 
+ -Computer [string[]] - Defaults to localhost 
  
  [-Instance <string>] - If provided will install SQL in an instance, otherwise default instance is used. 
  
@@ -37,12 +37,15 @@
  
  [-InstallSourcePath <string>] - Path to installation base. Should be a UNC Path such as \\server\SQLInstallation 
  
- [-DBAOSAdminGroup <string>] - Active directory group used for administration of SQL Server host machine. 
+ [-DBAOSAdminGroup [string[]]] - Active directory group used for administration of SQL Server host machine. 
  
- [-DBASQLAdminGroup <string>] - Active directory group used for administration of SQL Server databases and service. 
+ [-DBASQLAdminGroup [string[]]] - Active directory group used for administration of SQL Server databases and service. 
  
  [-SkipDriveConfig <boolean>] - Boolean value (True/False) to use to prevent initial drive configuration. Default is False. 
 
+ [-NoOpticalDrive] - Script assumes target(s) have an optical drive.  This switch will skip configuration if not present.
+ [-SkipSSMS] - switch that if included will skip the installation of SSMS
+ [-AddOSAdminToHostAdmin] - switch that if included will add members of the DBAOSAdminGroup to local machine administrators
  [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
  [-SkipPostDeployment] - switch that if included will not run post installation scripts
  [-SkipReboot] - switch that if included will skip the reboot at the end of the cycle
@@ -69,7 +72,9 @@
  2021/07/28 - 1.1.0 - Revised parameters to separate DBATeamGroup into OS administration from SQL administration 
  2021/08/12 - 1.2.0 - Enabled support for multiple computers, DBAOSAdminGroup, DBASQLAdminGroup as parameters.
  - Added support for Azure by offsetting disk configuration by 1... so most environments Disk1 is the D drive, in Azure there is a D:\Temporary Storage drive that requires the offset.
+ - Added support to handle if there is no optical drive present
  - Added support to ensure the required powershell modules were installed on the installing worksatation
+ - Added in several parameter validations
  - Moved validation procedures to external modules
  
  This script makes some directory assumptions: 
@@ -78,49 +83,53 @@
  3. All post deployment scripts can be found in the SQLScripts sub-folder. 
  #> 
  
- param ( 
-   [Parameter (Mandatory = $true)] 
-   [string[]]$Computer = 'localhost', 
+param ( 
+    [Parameter (Mandatory = $true)] 
+    [string[]]$Computer = 'localhost', 
 
-   [Parameter (Mandatory = $false)] 
-   [string]$Instance, 
+    [Parameter (Mandatory = $false)] 
+    [string]$Instance, 
 
-   [Parameter (Mandatory = $false)] 
-   [ValidateSet('SQL2016', 'SQL2017', 'SQL2019')] 
-   [string]$SQLVersion = 'SQL2019', 
+    [Parameter (Mandatory = $false)] 
+    [ValidateSet('SQL2016', 'SQL2017', 'SQL2019')] 
+    [string]$SQLVersion = 'SQL2019', 
 
-   [Parameter (Mandatory = $false)] 
-   [ValidateSet('1', '5')] 
-   [string]$NumberOfNonOSDrives = '5', 
+    [Parameter (Mandatory = $false)] 
+    [ValidateSet('1', '5')] 
+    [string]$NumberOfNonOSDrives = '5', 
 
-   [Parameter (Mandatory = $false)] 
-   [string]$InstallSourcePath = '\\server\ServerBuildScripts', 
+    [Parameter (Mandatory = $false)] 
+    [string]$InstallSourcePath = '\\server\ServerBuildScripts', 
 
-   [Parameter (Mandatory = $false)] 
-   [string]$SQLEngineServiceAccount, 
+    [Parameter (Mandatory = $false)] 
+    [string]$SQLEngineServiceAccount, 
 
-   [Parameter (Mandatory = $false)] 
-   [string]$SQLAgentServiceAccount, 
+    [Parameter (Mandatory = $false)] 
+    [string]$SQLAgentServiceAccount, 
 
-   [Parameter (Mandatory = $false)] 
-   [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
+    [Parameter (Mandatory = $false)] 
+    [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
 
-   [Parameter (Mandatory = $false)] 
-   [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
+    [Parameter (Mandatory = $false)] 
+    [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
 
-   [Switch]$HasOpticalDrive,
+    [Switch]$NoOpticalDrive,
 
-   [Switch]$SkipDriveConfig, 
+    [Switch]$SkipDriveConfig, 
 
-   [switch]$IsAzureVM,
+    [switch]$IsAzureVM,
 
-   [Switch]$SkipPostDeployment,
+    [switch]$AddOSAdminToHostAdmin,
 
-   [Switch]$SkipReboot,
+    [switch]$SkipSSMS,
 
-   [Parameter (Mandatory = $false)] 
-   [System.Management.Automation.PSCredential] 
-   $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
+    [Switch]$SkipPostDeployment,
+
+    [Switch]$SkipReboot,
+
+    [Parameter (Mandatory = $false)] 
+    [System.Management.Automation.PSCredential] 
+    $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
 $scriptVersion = '1.2.0' 
@@ -138,27 +147,22 @@ Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
 Import-Module $dir\helperFunctions\Tools.psm1
 
 #check if basic directory structure is present
-if((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false)
-{
+if ((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false) {
     write-warning "Key installation directories missing."
     $valid = $false
 }
 
 #check DBA OS Admin Group exists 
-foreach ($acct in $DBAOSAdminGroup)
-{
-    if((Test-AccountExists -AccountName $acct) -eq $False)
-    {
-    write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
-    $valid = $false
+foreach ($acct in $DBAOSAdminGroup) {
+    if ((Test-AccountExists -AccountName $acct) -eq $False) {
+        write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
+        $valid = $false
     }
 }
 
 #check DBA SQL Admin Group exists 
-foreach ($acct in $DBASQLAdminGroup)
-{
-    if((Test-AccountExists -AccountName $acct) -eq $False)
-    {
+foreach ($acct in $DBASQLAdminGroup) {
+    if ((Test-AccountExists -AccountName $acct) -eq $False) {
         write-warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
         $valid = $false
     }
@@ -166,32 +170,30 @@ foreach ($acct in $DBASQLAdminGroup)
 
 # check install credential is valid 
 IF ($null -eq $InstallCredential) { 
-   Write-Warning "User clicked cancel at credential prompt." 
-   Break 
+    Write-Warning "User clicked cancel at credential prompt." 
+    Break 
 } 
 ELSE { 
-    if((Test-AccountCredential -Credential $InstallCredential) -eq $false)
-    {
+    if ((Test-AccountCredential -Credential $InstallCredential) -eq $false) {
         $valid = $false
     }
 } 
 
-FOREACH($c in $Computer){
+FOREACH ($c in $Computer) {
     IF (!(Test-Connection -ComputerName $c -Quiet)) { 
-       Write-Warning "Unable to connect to $c" 
-       $valid = $false 
+        Write-Warning "Unable to connect to $c" 
+        $valid = $false 
     } 
 }
 
 IF (!(Test-Path $InstallSourcePath)) { 
-   Write-Warning "Unable to connect to $InstallSourcePath" 
-   $valid = $false
+    Write-Warning "Unable to connect to $InstallSourcePath" 
+    $valid = $false
 } 
 
 ##########################################
 # end of validations...  if any tests fail, quit
-if($valid -eq $false)
-{
+if ($valid -eq $false) {
     break
 }
 
@@ -201,48 +203,48 @@ copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:ProgramFiles\WindowsPower
 
 #define instance dependent variables
 IF ($Instance.Length -EQ 0) { 
-   $SQLInstance = 'MSSQLSERVER' 
-   $InstancePath = '' 
-   $FirewallSvc = 'MSSQLSERVER' 
-   $SvcName = '' 
+    $SQLInstance = 'MSSQLSERVER' 
+    $InstancePath = '' 
+    $FirewallSvc = 'MSSQLSERVER' 
+    $SvcName = '' 
 } 
 else { 
-   $SQLInstance = $Instance 
-   $InstancePath = "\$Instance" 
-   $FirewallSvc = "MSSQL`$$Instance" 
-   $SvcName = "`$$Instance" 
+    $SQLInstance = $Instance 
+    $InstancePath = "\$Instance" 
+    $FirewallSvc = "MSSQL`$$Instance" 
+    $SvcName = "`$$Instance" 
 } 
 
 #array used to help determine drive letters
-$driveLetterArr=[char[]]([int][char]'A'..[int][char]'Z')
+$driveLetterArr = [char[]]([int][char]'A'..[int][char]'Z')
 
 #parameter used to handle the fact that azure VM's have a D: "Temporary Storage" disk presented
-if($IsAzureVM.IsPresent -eq $true){
+if ($IsAzureVM.IsPresent -eq $true) {
     $driveOffset = 1
 }
-else{
+else {
     $driveOffset = 0
 }
 
 #Configure DrivePath Variables 
 switch ($NumberOfNonOSDrives) { 
     1 { 
-        $SQLSystemDir = ($driveLetterArr[3+$driveOffset] + ":\SQLSystem")
-        $SQLUserDBDir = ($driveLetterArr[3+$driveOffset] + ":\SQLData$InstancePath")
-        $SQLUserDBLogDir = ($driveLetterArr[3+$driveOffset] + ":\SQLLogs$InstancePath") 
-        $SQLTempDBDir = ($driveLetterArr[3+$driveOffset] + ":\SQLTempDBs$InstancePath") 
-        $SQLTempDBLogDir = ($driveLetterArr[3+$driveOffset] + ":\SQLTempDBs$InstancePath") 
-        $SQLBackupDir = ($driveLetterArr[3+$driveOffset] + ":\SQLBackups$InstancePath") 
+        $SQLSystemDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLSystem")
+        $SQLUserDBDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLData$InstancePath")
+        $SQLUserDBLogDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLLogs$InstancePath") 
+        $SQLTempDBDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLTempDBLogDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLBackupDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLBackups$InstancePath") 
     } 
     5 { 
-        $SQLSystemDir = ($driveLetterArr[3+$driveOffset] +":\SQLSystem")
-        $SQLUserDBDir = ($driveLetterArr[4+$driveOffset] +":\SQLData$InstancePath") 
-        $SQLUserDBLogDir = ($driveLetterArr[5+$driveOffset] +":\SQLLogs$InstancePath") 
-        $SQLTempDBDir = ($driveLetterArr[6+$driveOffset] +":\SQLTempDBs$InstancePath") 
-        $SQLTempDBLogDir = ($driveLetterArr[6+$driveOffset] +":\SQLTempDBs$InstancePath") 
-        $SQLBackupDir = ($driveLetterArr[7+$driveOffset] +":\SQLBackups$InstancePath") 
+        $SQLSystemDir = ($driveLetterArr[3 + $driveOffset] + ":\SQLSystem")
+        $SQLUserDBDir = ($driveLetterArr[4 + $driveOffset] + ":\SQLData$InstancePath") 
+        $SQLUserDBLogDir = ($driveLetterArr[5 + $driveOffset] + ":\SQLLogs$InstancePath") 
+        $SQLTempDBDir = ($driveLetterArr[6 + $driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLTempDBLogDir = ($driveLetterArr[6 + $driveOffset] + ":\SQLTempDBs$InstancePath") 
+        $SQLBackupDir = ($driveLetterArr[7 + $driveOffset] + ":\SQLBackups$InstancePath") 
     } 
- } 
+} 
 
 #Set dir to script location. 
 Set-Location $Dir 
@@ -250,58 +252,58 @@ Set-Location $Dir
 #create configuration that will copy required ps modules to target machine 
 Configuration InstallRequiredPSModules 
 { 
-   Import-DscResource -ModuleName PSDesiredStateConfiguration 
-   Node $AllNodes.NodeName 
-   { 
-       File InstallModules { 
-           DestinationPath = 'c:\Program Files\WindowsPowerShell\Modules\' 
-           SourcePath      = "$InstallSourcePath\PSModules\" 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           MatchSource     = $true 
-           Recurse         = $true 
-           Force           = $true 
-           Credential      = $InstallCredential 
-       } 
-   } 
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Node $AllNodes.NodeName 
+    { 
+        File InstallModules { 
+            DestinationPath = 'c:\Program Files\WindowsPowerShell\Modules\' 
+            SourcePath      = "$InstallSourcePath\PSModules\" 
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            MatchSource     = $true 
+            Recurse         = $true 
+            Force           = $true 
+            Credential      = $InstallCredential 
+        } 
+    } 
 } 
 
 #create configuration to configure the LCM to reboot during installation 
 Configuration LCMConfig 
 { 
-   Import-DscResource -ModuleName PSDesiredStateConfiguration 
-   Node $AllNodes.NodeName 
-   {
-       #Set LCM for Reboot 
-       LocalConfigurationManager { 
-           ActionAfterReboot  = 'ContinueConfiguration' 
-           ConfigurationMode  = 'ApplyOnly' 
-           RebootNodeIfNeeded = $False 
-       } 
-   } 
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Node $AllNodes.NodeName 
+    {
+        #Set LCM for Reboot 
+        LocalConfigurationManager { 
+            ActionAfterReboot  = 'ContinueConfiguration' 
+            ConfigurationMode  = 'ApplyOnly' 
+            RebootNodeIfNeeded = $False 
+        } 
+    } 
 } 
 
 #create configure drives 
 Configuration DriveConfiguration 
 { 
-   Import-DscResource -ModuleName PSDesiredStateConfiguration 
-   Import-DscResource -ModuleName StorageDsc 
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Import-DscResource -ModuleName StorageDsc 
       
-   Node $AllNodes.Where{$_.OpticalDrive -eq $true}.NodeName
-   {
+    Node $AllNodes.Where{ $_.OpticalDrive -eq $true }.NodeName
+    {
         #Configure optical drive as V:\ 
         OpticalDiskDriveLetter CDRom {
             DiskId      = 1 
             DriveLetter = 'V'
         } 
-   } 
+    } 
    
-   Node $AllNodes.NodeName
-   {
-       ###################################
-       #Configure Drive 1 for SQL System db's and binaries 
-       #This configuration is used in all setups
-       WaitForDisk Disk1 { 
+    Node $AllNodes.NodeName
+    {
+        ###################################
+        #Configure Drive 1 for SQL System db's and binaries 
+        #This configuration is used in all setups
+        WaitForDisk Disk1 { 
             DiskId           = 1 + $driveOffset 
             RetryIntervalSec = 60 
             RetryCount       = 60 
@@ -309,25 +311,25 @@ Configuration DriveConfiguration
 
         Disk Disk1Volume { 
             DiskId             = 1 + $driveOffset
-            DriveLetter        = $driveLetterArr[3+$driveOffset] #D Drive or E drive if in azure
+            DriveLetter        = $driveLetterArr[3 + $driveOffset] #D Drive or E drive if in azure
             FSLabel            = 'SQLSystem' 
             AllocationUnitSize = 64KB 
             DependsOn          = '[WaitForDisk]Disk1' 
         } 
 
         File SQLSystemFolder { 
-            DestinationPath = ($driveLetterArr[3+$driveOffset] + ":\SQLSystem")
+            DestinationPath = ($driveLetterArr[3 + $driveOffset] + ":\SQLSystem")
             Type            = 'Directory' 
             Ensure          = 'Present' 
             DependsOn       = '[Disk]Disk1Volume' 
         }       
-   }
+    }
 
-   Node $AllNodes.Where{$_.NumberOfDataDrives -eq '5'}.NodeName
-   {
-       ###################################
-       #Configure Drive 2 for SQL Data 
-       WaitForDisk Disk2 { 
+    Node $AllNodes.Where{ $_.NumberOfDataDrives -eq '5' }.NodeName
+    {
+        ###################################
+        #Configure Drive 2 for SQL Data 
+        WaitForDisk Disk2 { 
             DiskId           = 2 + $driveOffset 
             RetryIntervalSec = 60 
             RetryCount       = 60 
@@ -335,14 +337,14 @@ Configuration DriveConfiguration
 
         Disk Disk2Volume { 
             DiskId             = 2 + $driveOffset
-            DriveLetter        = $driveLetterArr[4+$driveOffset] #E Drive or F drive if in azure
+            DriveLetter        = $driveLetterArr[4 + $driveOffset] #E Drive or F drive if in azure
             FSLabel            = 'SQLData' 
             AllocationUnitSize = 64KB 
             DependsOn          = '[WaitForDisk]Disk2' 
         } 
 
         File SQLDataFolder { 
-            DestinationPath = ($driveLetterArr[4+$driveOffset] + ":\SQLData")
+            DestinationPath = ($driveLetterArr[4 + $driveOffset] + ":\SQLData")
             Type            = 'Directory' 
             Ensure          = 'Present' 
             DependsOn       = '[Disk]Disk2Volume' 
@@ -357,14 +359,14 @@ Configuration DriveConfiguration
 
         Disk Disk3Volume { 
             DiskId             = 3 + $driveOffset
-            DriveLetter        = $driveLetterArr[5+$driveOffset] #F Drive or G drive if in azure
+            DriveLetter        = $driveLetterArr[5 + $driveOffset] #F Drive or G drive if in azure
             FSLabel            = 'SQLLogs' 
             AllocationUnitSize = 64KB 
             DependsOn          = '[WaitForDisk]Disk3' 
         } 
 
         File SQLLogsFolder { 
-            DestinationPath = ($driveLetterArr[5+$driveOffset] + ":\SQLLogs")
+            DestinationPath = ($driveLetterArr[5 + $driveOffset] + ":\SQLLogs")
             Type            = 'Directory' 
             Ensure          = 'Present' 
             DependsOn       = '[Disk]Disk3Volume' 
@@ -379,14 +381,14 @@ Configuration DriveConfiguration
 
         Disk Disk4Volume { 
             DiskId             = 4 + $driveOffset
-            DriveLetter        = $driveLetterArr[6+$driveOffset] #G Drive or H drive if in azure
+            DriveLetter        = $driveLetterArr[6 + $driveOffset] #G Drive or H drive if in azure
             FSLabel            = 'SQLTempDBs' 
             AllocationUnitSize = 64KB 
             DependsOn          = '[WaitForDisk]Disk4' 
         } 
 
         File SQLTempDBsFolder { 
-            DestinationPath = ($driveLetterArr[6+$driveOffset] + ":\SQLTempDBs")
+            DestinationPath = ($driveLetterArr[6 + $driveOffset] + ":\SQLTempDBs")
             Type            = 'Directory' 
             Ensure          = 'Present' 
             DependsOn       = '[Disk]Disk4Volume' 
@@ -401,137 +403,152 @@ Configuration DriveConfiguration
 
         Disk Disk5Volume { 
             DiskId             = 5 + $driveOffset
-            DriveLetter        = $driveLetterArr[7+$driveOffset] #H Drive or I drive if in azure
+            DriveLetter        = $driveLetterArr[7 + $driveOffset] #H Drive or I drive if in azure
             FSLabel            = 'SQLBackups' 
             AllocationUnitSize = 64KB 
             DependsOn          = '[WaitForDisk]Disk5' 
         } 
 
         File SQLBackupsFolder { 
-            DestinationPath = ($driveLetterArr[7+$driveOffset] + ":\SQLBackups")
+            DestinationPath = ($driveLetterArr[7 + $driveOffset] + ":\SQLBackups")
             Type            = 'Directory' 
             Ensure          = 'Present' 
             DependsOn       = '[Disk]Disk5Volume' 
         } 
-   }
+    }
 } 
 
 #create configuration for SQL Server 
 Configuration InstallSQLEngine 
 { 
-   Import-DscResource -ModuleName PSDesiredStateConfiguration 
-   Import-DscResource -ModuleName ComputerManagementDsc 
-   Import-DscResource -ModuleName SqlServerDsc 
-   Import-DscResource -ModuleName StorageDsc 
-   Import-DscResource -ModuleName AccessControlDSC 
-   Import-DscResource -ModuleName NetworkingDsc 
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Import-DscResource -ModuleName ComputerManagementDsc 
+    Import-DscResource -ModuleName SqlServerDsc 
+    Import-DscResource -ModuleName StorageDsc 
+    Import-DscResource -ModuleName AccessControlDSC 
+    Import-DscResource -ModuleName NetworkingDsc 
 
-   Node $AllNodes.NodeName 
-   { 
+    Node $AllNodes.Where{ $_.SkipSSMS -eq $false }.NodeName
+    {
+        #Copy SSMS media
+        File InstallMediaSSMS { 
+            DestinationPath = 'C:\Software\SSMS' 
+            SourcePath      = "$InstallSourcePath\InstallMedia\SQLManagementStudio" 
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            MatchSource     = $true 
+            Recurse         = $true 
+            Force           = $true 
+            Credential      = $InstallCredential 
+        } 
 
-       #Configure power plan for high performance 
-       PowerPlan PwrPlan { 
-           IsSingleInstance = 'Yes' 
-           Name             = 'High performance' 
-       } 
+        #SSMS Installation
+        Package SSMS { 
+            Ensure    = 'Present' 
+            Name      = 'SSMS-Setup-ENU.exe' 
+            Path      = 'c:\Software\SSMS\SSMS-Setup-ENU.exe' 
+            Arguments = '/install /quiet /norestart /DoNotInstallAzureDataStudio=1' 
+            ProductID = '{FFEDA3B1-242E-40C2-BB23-7E3B87DAC3C1}' ## this product id is associated to SSMS 18.9.1 
+            DependsOn = '[File]InstallMediaSSMS', '[SQLSetup]Instance' 
+        } 
+    } 
 
-       #Configure time zone 
-       TimeZone TimezoneEST { 
-           IsSingleInstance = 'Yes' 
-           TimeZone         = 'Eastern Standard Time' 
-       } 
+    Node $AllNodes.Where{ $_.AddOSAdminToHostAdmin -eq $true }.NodeName
+    {
+        Group AdministratorsGroup
+        {
+            GroupName        = "Administrators"
+            Ensure           = "Present"
+            MembersToInclude = 'contoso\dba','contoso\stecarr-adm'
+            Credential       = $InstallCredential
+        }
+    }
 
-       WindowsFeature NetFramework { 
-           Name   = 'NET-Framework-45-Core' 
-           Ensure = 'Present' 
-       } 
+    Node $AllNodes.NodeName 
+    { 
 
-       File InstallMediaSQLENG { 
-           DestinationPath = "C:\Software\$SQLVersion" 
-           SourcePath      = "$InstallSourcePath\InstallMedia\$SQLVersion" 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           MatchSource     = $true 
-           Recurse         = $true 
-           Force           = $true 
-           Credential      = $InstallCredential 
-       } 
+        #Configure power plan for high performance 
+        PowerPlan PwrPlan { 
+            IsSingleInstance = 'Yes' 
+            Name             = 'High performance' 
+        } 
 
-       File InstallMediaSSMS { 
-           DestinationPath = 'C:\Software\SSMS' 
-           SourcePath      = "$InstallSourcePath\InstallMedia\SQLManagementStudio" 
-           Type            = 'Directory' 
-           Ensure          = 'Present' 
-           MatchSource     = $true 
-           Recurse         = $true 
-           Force           = $true 
-           Credential      = $InstallCredential 
-       } 
+        #Configure time zone 
+        TimeZone TimezoneEST { 
+            IsSingleInstance = 'Yes' 
+            TimeZone         = 'Eastern Standard Time' 
+        } 
 
-       SQLSetup Instance { 
-           InstanceName          = $SQLInstance 
-           SourcePath            = "C:\Software\$SQLVersion" 
-           Features              = 'SQLENGINE,CONN,BC' 
-           SQLSysAdminAccounts   = @($DBASQLAdminGroup)
-           InstallSQLDataDir     = "$SQLSystemDir" 
-           SQLUserDBDir          = "$SQLUserDBDir" 
-           SQLUserDBLogDir       = "$SQLUserDBLogDir" 
-           SQLTempDBDir          = "$SQLTempDBDir" 
-           SQLTempDBLogDir       = "$SQLTempDBLogDir" 
-           SQLBackupDir          = "$SQLBackupDir" 
-           UpdateEnabled         = $true 
-           UpdateSource          = "C:\Software\$SQLVersion\Updates"            
-           AgtSvcStartupType     = 'Automatic' 
-           SqlSvcStartupType     = 'Automatic' 
-           BrowserSvcStartupType = 'Automatic' 
-           DependsOn             = '[File]InstallMediaSQLENG', '[WindowsFeature]NetFramework' 
-       } 
+        WindowsFeature NetFramework { 
+            Name   = 'NET-Framework-45-Core' 
+            Ensure = 'Present' 
+        } 
 
-       Firewall SQLInstanceFirewall { 
-           Name        = "SQL Service - $SQLInstance" 
-           DisplayName = "SQL Server - $SQLInstance Instance" 
-           Ensure      = 'Present' 
-           Enabled     = 'True' 
-           Profile     = ('Domain') 
-           Protocol    = 'TCP' 
-           Service     = $FirewallSvc 
-           DependsOn   = '[SQLSetup]Instance' 
-       } 
+        File InstallMediaSQLENG { 
+            DestinationPath = "C:\Software\$SQLVersion" 
+            SourcePath      = "$InstallSourcePath\InstallMedia\$SQLVersion" 
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            MatchSource     = $true 
+            Recurse         = $true 
+            Force           = $true 
+            Credential      = $InstallCredential 
+        } 
 
-       Firewall SQLBrowserFirewall { 
-           Name        = 'SQLBrowser' 
-           DisplayName = 'SQL Server Browser Service' 
-           Ensure      = 'Present' 
-           Enabled     = 'True' 
-           Profile     = ('Domain') 
-           Protocol    = 'Any' 
-           Service     = 'SQLBrowser' 
-           DependsOn   = '[SQLSetup]Instance' 
-       } 
+        SQLSetup Instance { 
+            InstanceName          = $SQLInstance 
+            SourcePath            = "C:\Software\$SQLVersion" 
+            Features              = 'SQLENGINE,CONN,BC' 
+            SQLSysAdminAccounts   = @($DBASQLAdminGroup)
+            InstallSQLDataDir     = "$SQLSystemDir" 
+            SQLUserDBDir          = "$SQLUserDBDir" 
+            SQLUserDBLogDir       = "$SQLUserDBLogDir" 
+            SQLTempDBDir          = "$SQLTempDBDir" 
+            SQLTempDBLogDir       = "$SQLTempDBLogDir" 
+            SQLBackupDir          = "$SQLBackupDir" 
+            UpdateEnabled         = $true 
+            UpdateSource          = "C:\Software\$SQLVersion\Updates"            
+            AgtSvcStartupType     = 'Automatic' 
+            SqlSvcStartupType     = 'Automatic' 
+            BrowserSvcStartupType = 'Automatic' 
+            DependsOn             = '[File]InstallMediaSQLENG', '[WindowsFeature]NetFramework' 
+        } 
 
-       #SSMS 
-       Package SSMS { 
-           Ensure    = 'Present' 
-           Name      = 'SSMS-Setup-ENU.exe' 
-           Path      = 'c:\Software\SSMS\SSMS-Setup-ENU.exe' 
-           Arguments = '/install /quiet /norestart /DoNotInstallAzureDataStudio=1' 
-           ProductID = '{FFEDA3B1-242E-40C2-BB23-7E3B87DAC3C1}' ## this product id is associated to SSMS 18.9.1 
-           DependsOn = '[File]InstallMediaSSMS' 
-       } 
+        Firewall SQLInstanceFirewall { 
+            Name        = "SQL Service - $SQLInstance" 
+            DisplayName = "SQL Server - $SQLInstance Instance" 
+            Ensure      = 'Present' 
+            Enabled     = 'True' 
+            Profile     = ('Domain') 
+            Protocol    = 'TCP' 
+            Service     = $FirewallSvc 
+            DependsOn   = '[SQLSetup]Instance' 
+        } 
 
-       #Ensure CEIP service is disabled 
-       Service DisableCEIP { 
-           Name        = "SQLTELEMETRY$SvcName" 
-           StartupType = 'disabled' 
-           State       = 'Stopped' 
-           DependsOn   = '[SQLSetup]Instance' 
-       } 
+        Firewall SQLBrowserFirewall { 
+            Name        = 'SQLBrowser' 
+            DisplayName = 'SQL Server Browser Service' 
+            Ensure      = 'Present' 
+            Enabled     = 'True' 
+            Profile     = ('Domain') 
+            Protocol    = 'Any' 
+            Service     = 'SQLBrowser' 
+            DependsOn   = '[SQLSetup]Instance' 
+        } 
 
-       #Grant DBATeam to file system 
+        #Ensure CEIP service is disabled 
+        Service DisableCEIP { 
+            Name        = "SQLTELEMETRY$SvcName" 
+            StartupType = 'disabled' 
+            State       = 'Stopped' 
+            DependsOn   = '[SQLSetup]Instance' 
+        } 
+
+        #Grant DBATeam to file system 
         NTFSAccessEntry SQLSystemFarmAdmins { 
             Path              = "$SQLSystemDir"
             AccessControlList = @( 
-                foreach($user in $DBAOSAdminGroup){
+                foreach ($user in $DBAOSAdminGroup) {
                     NTFSAccessControlList { 
                         Principal          = $user
                         ForcePrincipal     = $true 
@@ -553,7 +570,7 @@ Configuration InstallSQLEngine
         NTFSAccessEntry SQLDataFarmAdmins { 
             Path              = "$SQLUserDBDir" 
             AccessControlList = @( 
-                foreach($user in $DBAOSAdminGroup){
+                foreach ($user in $DBAOSAdminGroup) {
                     NTFSAccessControlList { 
                         Principal          = $user
                         ForcePrincipal     = $true 
@@ -575,7 +592,7 @@ Configuration InstallSQLEngine
         NTFSAccessEntry SQLLogsFarmAdmins { 
             Path              = "$SQLUserDBLogDir" 
             AccessControlList = @( 
-                foreach($user in $DBAOSAdminGroup){
+                foreach ($user in $DBAOSAdminGroup) {
                     NTFSAccessControlList { 
                         Principal          = $user
                         ForcePrincipal     = $true 
@@ -597,7 +614,7 @@ Configuration InstallSQLEngine
         NTFSAccessEntry SQLTempDBFarmAdmins { 
             Path              = "$SQLTempDBDir" 
             AccessControlList = @( 
-                foreach($user in $DBAOSAdminGroup){
+                foreach ($user in $DBAOSAdminGroup) {
                     NTFSAccessControlList { 
                         Principal          = $user
                         ForcePrincipal     = $true 
@@ -619,7 +636,7 @@ Configuration InstallSQLEngine
         NTFSAccessEntry SQLBackupsFarmAdmins { 
             Path              = "$SQLBackupDir" 
             AccessControlList = @( 
-                foreach($user in $DBAOSAdminGroup){
+                foreach ($user in $DBAOSAdminGroup) {
                     NTFSAccessControlList { 
                         Principal          = $user
                         ForcePrincipal     = $true 
@@ -638,32 +655,32 @@ Configuration InstallSQLEngine
             DependsOn         = '[SQLSetup]Instance' 
         } 
     
-       Registry VersionStamp { 
-           Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
-           ValueName = "InstallScriptVersion" 
-           ValueData = "$scriptVersion" 
-       } 
-       Registry InstalledBy { 
-           Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
-           ValueName = "InstalledBy" 
-           ValueData = "$env:username" 
-       } 
-       Registry InstalledDate { 
-           Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
-           ValueName = "InstalledDate" 
-           ValueData = $InstallDate 
-       } 
-       Registry InstallParams { 
-           Ensure    = "Present" 
-           Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
-           ValueType = "MultiString" 
-           ValueName = "InstallParameters" 
-           ValueData = @("Computer=$Computer", "Instance=$Instance", "SQLVersion=$SQLVersion", "NumberOfNonOSDrives=$NumberOfNonOSDrives", "InstallSourcePath=$InstallSourcePath", "DBAOSAdminGroup=$DBAOSAdminGrcup", "DBASQLAdminGroup=$DBASQLAdminGroup", "SkipDriveConfig=$SkipDriveConfig", "InstallCredential=$username") 
-       } 
-   } 
+        Registry VersionStamp { 
+            Ensure    = "Present" 
+            Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
+            ValueName = "InstallScriptVersion" 
+            ValueData = "$scriptVersion" 
+        } 
+        Registry InstalledBy { 
+            Ensure    = "Present" 
+            Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
+            ValueName = "InstalledBy" 
+            ValueData = "$env:username" 
+        } 
+        Registry InstalledDate { 
+            Ensure    = "Present" 
+            Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
+            ValueName = "InstalledDate" 
+            ValueData = $InstallDate 
+        } 
+        Registry InstallParams { 
+            Ensure    = "Present" 
+            Key       = "HKEY_LOCAL_MACHINE\Software\Microsoft\Microsoft SQL Server\DeploySQL\$SQLInstance" 
+            ValueType = "MultiString" 
+            ValueName = "InstallParameters" 
+            ValueData = @("Computer=$Computer", "Instance=$Instance", "SQLVersion=$SQLVersion", "NumberOfNonOSDrives=$NumberOfNonOSDrives", "InstallSourcePath=$InstallSourcePath", "DBAOSAdminGroup=$DBAOSAdminGroup", "DBASQLAdminGroup=$DBASQLAdminGroup", "SkipDriveConfig=$SkipDriveConfig", "InstallCredential=$username") 
+        } 
+    } 
 } 
 
 [System.Collections.ArrayList]$s = $Computer
@@ -672,27 +689,29 @@ $p = $Computer[0]
 
 # Setup our configuration data object that will be used by our DSC configurations 
 $config = @{ 
-   AllNodes = @( 
-       @{ 
-           NodeName                    = $p
-           NodeType                    = 'Primary'
-           PSDscAllowPlainTextPassword = $true 
-           PsDscAllowDomainUser        = $true 
-           OpticalDrive = $HasOpticalDrive.IsPresent
-           NumberOfDataDrives = $NumberOfNonOSDrives
-       }
-   )
-} 
-foreach($c in $s)
-{
-    $config.AllNodes += @{
-            NodeName = $c 
-            NodeType = 'Secondary'
+    AllNodes = @( 
+        @{ 
+            NodeName                    = "*"
             PSDscAllowPlainTextPassword = $true 
             PsDscAllowDomainUser        = $true 
-            OpticalDrive = $HasOpticalDrive.IsPresent
-            NumberOfDataDrives = $NumberOfNonOSDrives
-         }
+            OpticalDrive                = (!$NoOpticalDrive.IsPresent)
+            SkipSSMS                    = $SkipSSMS.IsPresent
+            AddOSAdminToHostAdmin       = $AddOSAdminToHostAdmin.IsPresent
+            NumberOfDataDrives          = $NumberOfNonOSDrives
+        }
+    )
+} 
+# configuration specific to primary node
+$config.AllNodes += @{
+    NodeName                    = $p
+    NodeType                    = 'Primary'
+}
+# configuration specific to all other nodes
+foreach ($c in $s) {
+    $config.AllNodes += @{
+        NodeName                    = $c 
+        NodeType                    = 'Secondary'
+    }
 }
 
 #$config.AllNodes | out-string | write-host
@@ -708,7 +727,7 @@ Set-DscLocalConfigurationManager -Path "$Dir\MOF\LCMConfig" -CimSession $cSessio
 InstallRequiredPSModules -ConfigurationData $config -OutputPath "$Dir\MOF\InstallPSModules" 
 Start-DscConfiguration -Path "$Dir\MOF\InstallPSModules" -Verbose -Wait -Force -CimSession $cSessions -ErrorAction Stop 
 
-if($SkipDriveConfig.isPresent -eq $false){
+if ($SkipDriveConfig.isPresent -eq $false) {
     #Configure Drives 
     DriveConfiguration -ConfigurationData $config -OutputPath "$Dir\MOF\DiskConfig" 
     Start-DscConfiguration -Path "$Dir\MOF\DiskConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
@@ -718,21 +737,22 @@ if($SkipDriveConfig.isPresent -eq $false){
 InstallSQLEngine -ConfigurationData $config -OutputPath "$Dir\MOF\SQLConfig" 
 Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
-if($SkipReboot.IsPresent -eq $false)
-{
+if ($SkipReboot.IsPresent -eq $false) {
     #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
     restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 -Protocol WSMan
 }
 
-if($SkipPostDeployment.IsPresent -eq $false)
-{
-    foreach($c in $Computer){
+if ($SkipPostDeployment.IsPresent -eq $false) {
+    foreach ($c in $Computer) {
         #Run SQLInstanceConfiguration.ps1 
         If ($Instance.Length -EQ 0) { 
-        .\SQLInstanceConfiguration.ps1 -Computer $c -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+            .\SQLInstanceConfiguration.ps1 -Computer $c -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
         }
         else { 
-        .\SQLInstanceConfiguration.ps1 -Computer $c -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
+            .\SQLInstanceConfiguration.ps1 -Computer $c -Instance $Instance -InstallSourcePath $InstallSourcePath -InstallCredential $InstallCredential 
         } 
     }
 }
+
+# remove mof files generated during install
+# remove-item "$Dir\MOF" -Force -Recurse
