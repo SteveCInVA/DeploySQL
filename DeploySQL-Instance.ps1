@@ -5,7 +5,7 @@
  
  .DESCRIPTION 
  
- Script that was developed by the PESB SQL team to deploy SQL Server in a known configuration to targeted servers. 
+ Script that was developed by the SQL team to deploy SQL Server in a known configuration to targeted servers. 
  High level tasks performed by this script: 
  
  - Copy required PowerShell modules to target computer 
@@ -24,9 +24,7 @@
  - Ensure DBATeam is granted file system permissions to necessary SQL folders 
  - Restarts target computer 
  - Execute SQL Server Post Installation Configuration Script .\SQLInstanceConfiguration.ps1 
- 
- For questions or issues please contact 
- 
+  
  .INPUTS
  
  -Computer <string> - Defaults to localhost 
@@ -62,14 +60,17 @@
  .NOTES 
  
  AUTHOR: Steve Carroll - Microsoft - Sr. Customer Engineer 
- DATE: 7/27/2021 - SC - Version 1.0.0 
- SOURCE CODE AT: 
+ SOURCE CODE AT: https://github.com/SteveCInVA/DeploySQL/
  
  VERSION HISTORY: 
  2021/07/21 - 1.0.0 - Initial release of script 
  2021/07/21 - 1.0.1 - Changed default parameter for DBATeamGroup to use local domain instead of hard-coded domain\DBATeamMembers 
  - Added check to verify DBATeamGroup exists in current domain. 
  2021/07/28 - 1.1.0 - Revised parameters to separate DBATeamGroup into OS administration from SQL administration 
+ 2021/08/12 - 1.2.0 - Enabled support for multiple computers, DBAOSAdminGroup, DBASQLAdminGroup as parameters.
+ - Added support for Azure by offsetting disk configuration by 1... so most environments Disk1 is the D drive, in Azure there is a D:\Temporary Storage drive that requires the offset.
+ - Added support to ensure the required powershell modules were installed on the installing worksatation
+ - Moved validation procedures to external modules
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
