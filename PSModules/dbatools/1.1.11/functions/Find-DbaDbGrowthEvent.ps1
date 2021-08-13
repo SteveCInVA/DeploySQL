@@ -1,0 +1,399 @@
+function Find-DbaDbGrowthEvent {
+    <#
+    .SYNOPSIS
+        Finds any database AutoGrow events in the Default Trace.
+
+    .DESCRIPTION
+        Finds any database AutoGrow events in the Default Trace.
+
+        The following events are included:
+        92 - Data File Auto Grow
+        93 - Log File Auto Grow
+        94 - Data File Auto Shrink
+        95 - Log File Auto Shrink
+
+    .PARAMETER SqlInstance
+        The target SQL Server instance or instances. This can be a collection and receive pipeline input to allow the function to be executed against multiple SQL Server instances.
+
+    .PARAMETER SqlCredential
+        Login to the target instance using alternative credentials. Accepts PowerShell credentials (Get-Credential).
+
+        Windows Authentication, SQL Server Authentication, Active Directory - Password, and Active Directory - Integrated are all supported.
+
+        For MFA support, please use Connect-DbaInstance.
+
+    .PARAMETER Database
+        The database(s) to process - this list is auto-populated from the server. If unspecified, all databases will be processed.
+
+    .PARAMETER ExcludeDatabase
+        The database(s) to exclude - this list is auto-populated from the server
+
+    .PARAMETER EventType
+        Provide a filter on growth event type to filter the results.
+
+        Allowed values: Growth, Shrink
+
+    .PARAMETER FileType
+        Provide a filter on file type to filter the results.
+
+        Allowed values: Data, Log
+
+    .PARAMETER UseLocalTime
+        Return the local time of the instance instead of converting to UTC.
+
+    .PARAMETER EnableException
+        By default, when something goes wrong we try to catch it, interpret it and give you a friendly warning message.
+        This avoids overwhelming you with "sea of red" exceptions, but is inconvenient because it basically disables advanced scripting.
+        Using this switch turns this "nice by default" feature off and enables you to catch exceptions with your own try/catch.
+
+    .NOTES
+        Tags: AutoGrow,Growth,Database
+        Author: Aaron Nelson
+
+        Website: https://dbatools.io
+        Copyright: (c) 2018 by dbatools, licensed under MIT
+        License: MIT https://opensource.org/licenses/MIT
+
+        Query Extracted from SQL Server Management Studio (SSMS) 2016.
+
+    .LINK
+        https://dbatools.io/Find-DbaDbGrowthEvent
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance localhost
+
+        Returns any database AutoGrow events in the Default Trace with UTC time for the instance for every database on the localhost instance.
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance localhost -UseLocalTime
+
+        Returns any database AutoGrow events in the Default Trace with the local time of the instance for every database on the localhost instance.
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance ServerA\SQL2016, ServerA\SQL2014
+
+        Returns any database AutoGrow events in the Default Traces for every database on ServerA\sql2016 & ServerA\SQL2014.
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance ServerA\SQL2016 | Format-Table -AutoSize -Wrap
+
+        Returns any database AutoGrow events in the Default Trace for every database on the ServerA\SQL2016 instance in a table format.
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance ServerA\SQL2016 -EventType Shrink
+
+        Returns any database Auto Shrink events in the Default Trace for every database on the ServerA\SQL2016 instance.
+
+    .EXAMPLE
+        PS C:\> Find-DbaDbGrowthEvent -SqlInstance ServerA\SQL2016 -EventType Growth -FileType Data
+
+        Returns any database Auto Growth events on data files in the Default Trace for every database on the ServerA\SQL2016 instance.
+
+    #>
+    [CmdletBinding()]
+    param (
+        [parameter(Mandatory, ValueFromPipeline)]
+        [DbaInstance[]]$SqlInstance,
+        [PSCredential]$SqlCredential,
+        [object[]]$Database,
+        [object[]]$ExcludeDatabase,
+        [ValidateSet('Growth', 'Shrink')]
+        [string]$EventType,
+        [ValidateSet('Data', 'Log')]
+        [string]$FileType,
+        [switch]$UseLocalTime,
+        [switch]$EnableException
+    )
+
+    begin {
+        $eventClass = New-Object System.Collections.ArrayList
+        92..95 | ForEach-Object { $null = $eventClass.Add($_) }
+
+        if (Test-Bound 'EventType', 'FileType') {
+            switch ($FileType) {
+                'Data' {
+                    <# should only contain events for data: 92 (grow), 94 (shrink) #>
+                    $eventClass.Remove(93)
+                    $eventClass.Remove(95)
+                }
+                'Log' {
+                    <# should only contain events for log: 93 (grow), 95 (shrink) #>
+                    $eventClass.Remove(92)
+                    $eventClass.Remove(94)
+                }
+            }
+            switch ($EventType) {
+                'Growth' {
+                    <# should only contain events for growth: 92 (data), 93 (log) #>
+                    $eventClass.Remove(94)
+                    $eventClass.Remove(95)
+                }
+                'Shrink' {
+                    <# should only contain events for shrink: 94 (data), 95 (log) #>
+                    $eventClass.Remove(92)
+                    $eventClass.Remove(93)
+                }
+            }
+        }
+
+        $eventClassFilter = $eventClass -join ","
+
+        $sqlTemplate = "
+            BEGIN TRY
+                IF (SELECT CONVERT(INT,[value_in_use]) FROM sys.configurations WHERE [name] = 'default trace enabled' ) = 1
+                    BEGIN
+                        DECLARE @curr_tracefilename VARCHAR(500);
+                        DECLARE @base_tracefilename VARCHAR(500);
+                        DECLARE @indx INT;
+
+                        SELECT @curr_tracefilename = [path]
+                        FROM sys.traces
+                        WHERE is_default = 1 ;
+
+                        SET @curr_tracefilename = REVERSE(@curr_tracefilename);
+                        SELECT @indx  = PATINDEX('%\%', @curr_tracefilename);
+                        SET @curr_tracefilename = REVERSE(@curr_tracefilename);
+                        SET @base_tracefilename = LEFT( @curr_tracefilename,LEN(@curr_tracefilename) - @indx) + '\log.trc';
+
+                        SELECT
+                            SERVERPROPERTY('MachineName') AS ComputerName,
+                            ISNULL(SERVERPROPERTY('InstanceName'), 'MSSQLSERVER') AS InstanceName,
+                            SERVERPROPERTY('ServerName') AS SqlInstance,
+                            CONVERT(INT,(DENSE_RANK() OVER (ORDER BY [StartTime] DESC))%2) AS OrderRank,
+                                CONVERT(INT, [EventClass]) AS EventClass,
+                            [DatabaseName],
+                            [Filename],
+                            CONVERT(INT,(Duration/1000)) AS Duration,
+                            $(if (-not $UseLocalTime) { "
+                            DATEADD (MINUTE, DATEDIFF(MINUTE, GETDATE(), GETUTCDATE()), [StartTime]) AS StartTime,  -- Convert to UTC time
+                            DATEADD (MINUTE, DATEDIFF(MINUTE, GETDATE(), GETUTCDATE()), [EndTime]) AS EndTime,  -- Convert to UTC time"
+                            }
+                            else { "
+                            [StartTime] AS StartTime,
+                            [EndTime] AS EndTime,"
+                            })
+                            ([IntegerData]*8.0/1024) AS ChangeInSize,
+                            ApplicationName,
+                            HostName,
+                            SessionLoginName,
+                            SPID
+                        FROM::fn_trace_gettable( @base_tracefilename, DEFAULT )
+                        WHERE
+                            [EventClass] IN ($eventClassFilter)
+                            AND [ServerName] = @@SERVERNAME
+                            AND [DatabaseName] IN (_DatabaseList_)
+                        ORDER BY [StartTime] DESC;
+                    END
+                ELSE
+                    SELECT
+                        SERVERPROPERTY('MachineName') AS ComputerName,
+                        ISNULL(SERVERPROPERTY('InstanceName'), 'MSSQLSERVER') AS InstanceName,
+                        SERVERPROPERTY('ServerName') AS SqlInstance,
+                        -100 AS [OrderRank],
+                        -1 AS [OrderRank],
+                        0 AS [EventClass],
+                        0 [DatabaseName],
+                        0 AS [Filename],
+                        0 AS [Duration],
+                        0 AS [StartTime],
+                        0 AS [EndTime],
+                        0 AS ChangeInSize,
+                        0 AS [ApplicationName],
+                        0 AS [HostName],
+                        0 AS [SessionLoginName],
+                        0 AS [SPID]
+            END	TRY
+            BEGIN CATCH
+                SELECT
+                    SERVERPROPERTY('MachineName') AS ComputerName,
+                    ISNULL(SERVERPROPERTY('InstanceName'), 'MSSQLSERVER') AS InstanceName,
+                    SERVERPROPERTY('ServerName') AS SqlInstance,
+                    -100 AS [OrderRank],
+                    -100 AS [OrderRank],
+                    ERROR_NUMBER() AS [EventClass],
+                    ERROR_SEVERITY() AS [DatabaseName],
+                    ERROR_STATE() AS [Filename],
+                    ERROR_MESSAGE() AS [Duration],
+                    1 AS [StartTime],
+                    1 AS [EndTime],
+                    1 AS [ChangeInSize],
+                    1 AS [ApplicationName],
+                    1 AS [HostName],
+                    1 AS [SessionLoginName],
+                    1 AS [SPID]
+            END CATCH"
+    }
+    process {
+        foreach ($instance in $SqlInstance) {
+            try {
+                $server = Connect-DbaInstance -SqlInstance $instance -SqlCredential $SqlCredential
+            } catch {
+                Stop-Function -Message "Failure" -Category ConnectionError -ErrorRecord $_ -Target $instance -Continue
+            }
+
+            $dbs = $server.Databases
+
+            if ($Database) {
+                $dbs = $dbs | Where-Object Name -In $Database
+            }
+
+            if ($ExcludeDatabase) {
+                $dbs = $dbs | Where-Object Name -NotIn $ExcludeDatabase
+            }
+
+            #Create dblist name in 'db1', 'db2' format
+            $dbsList = "'$($($dbs | ForEach-Object {$_.Name}) -join "','")'"
+            Write-Message -Level Verbose -Message "Executing query against $dbsList on $instance"
+
+            $sql = $sqlTemplate -replace '_DatabaseList_', $dbsList
+            Write-Message -Level Debug -Message "Executing SQL Statement:`n $sql"
+
+            $defaults = 'ComputerName', 'InstanceName', 'SqlInstance', 'EventClass', 'DatabaseName', 'Filename', 'Duration', 'StartTime', 'EndTime', 'ChangeInSize', 'ApplicationName', 'HostName'
+
+            try {
+                Select-DefaultView -InputObject $server.Query($sql) -Property $defaults
+            } catch {
+                Stop-Function -Message "Issue collecting data on $server" -Target $server -ErrorRecord $_ -Exception $_.Exception.InnerException.InnerException.InnerException -Continue
+            }
+        }
+    }
+}
+
+# SIG # Begin signature block
+# MIIZewYJKoZIhvcNAQcCoIIZbDCCGWgCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8rathUo6JBluQobXV9OcP7t1
+# YAugghSJMIIE/jCCA+agAwIBAgIQDUJK4L46iP9gQCHOFADw3TANBgkqhkiG9w0B
+# AQsFADByMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
+# VQQLExB3d3cuZGlnaWNlcnQuY29tMTEwLwYDVQQDEyhEaWdpQ2VydCBTSEEyIEFz
+# c3VyZWQgSUQgVGltZXN0YW1waW5nIENBMB4XDTIxMDEwMTAwMDAwMFoXDTMxMDEw
+# NjAwMDAwMFowSDELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMu
+# MSAwHgYDVQQDExdEaWdpQ2VydCBUaW1lc3RhbXAgMjAyMTCCASIwDQYJKoZIhvcN
+# AQEBBQADggEPADCCAQoCggEBAMLmYYRnxYr1DQikRcpja1HXOhFCvQp1dU2UtAxQ
+# tSYQ/h3Ib5FrDJbnGlxI70Tlv5thzRWRYlq4/2cLnGP9NmqB+in43Stwhd4CGPN4
+# bbx9+cdtCT2+anaH6Yq9+IRdHnbJ5MZ2djpT0dHTWjaPxqPhLxs6t2HWc+xObTOK
+# fF1FLUuxUOZBOjdWhtyTI433UCXoZObd048vV7WHIOsOjizVI9r0TXhG4wODMSlK
+# XAwxikqMiMX3MFr5FK8VX2xDSQn9JiNT9o1j6BqrW7EdMMKbaYK02/xWVLwfoYer
+# vnpbCiAvSwnJlaeNsvrWY4tOpXIc7p96AXP4Gdb+DUmEvQECAwEAAaOCAbgwggG0
+# MA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMBYGA1UdJQEB/wQMMAoGCCsG
+# AQUFBwMIMEEGA1UdIAQ6MDgwNgYJYIZIAYb9bAcBMCkwJwYIKwYBBQUHAgEWG2h0
+# dHA6Ly93d3cuZGlnaWNlcnQuY29tL0NQUzAfBgNVHSMEGDAWgBT0tuEgHf4prtLk
+# YaWyoiWyyBc1bjAdBgNVHQ4EFgQUNkSGjqS6sGa+vCgtHUQ23eNqerwwcQYDVR0f
+# BGowaDAyoDCgLoYsaHR0cDovL2NybDMuZGlnaWNlcnQuY29tL3NoYTItYXNzdXJl
+# ZC10cy5jcmwwMqAwoC6GLGh0dHA6Ly9jcmw0LmRpZ2ljZXJ0LmNvbS9zaGEyLWFz
+# c3VyZWQtdHMuY3JsMIGFBggrBgEFBQcBAQR5MHcwJAYIKwYBBQUHMAGGGGh0dHA6
+# Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBPBggrBgEFBQcwAoZDaHR0cDovL2NhY2VydHMu
+# ZGlnaWNlcnQuY29tL0RpZ2lDZXJ0U0hBMkFzc3VyZWRJRFRpbWVzdGFtcGluZ0NB
+# LmNydDANBgkqhkiG9w0BAQsFAAOCAQEASBzctemaI7znGucgDo5nRv1CclF0CiNH
+# o6uS0iXEcFm+FKDlJ4GlTRQVGQd58NEEw4bZO73+RAJmTe1ppA/2uHDPYuj1UUp4
+# eTZ6J7fz51Kfk6ftQ55757TdQSKJ+4eiRgNO/PT+t2R3Y18jUmmDgvoaU+2QzI2h
+# F3MN9PNlOXBL85zWenvaDLw9MtAby/Vh/HUIAHa8gQ74wOFcz8QRcucbZEnYIpp1
+# FUL1LTI4gdr0YKK6tFL7XOBhJCVPst/JKahzQ1HavWPWH1ub9y4bTxMd90oNcX6X
+# t/Q/hOvB46NJofrOp79Wz7pZdmGJX36ntI5nePk2mOHLKNpbh6aKLzCCBRowggQC
+# oAMCAQICEAMFu4YhsKFjX7/erhIE520wDQYJKoZIhvcNAQELBQAwcjELMAkGA1UE
+# BhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2lj
+# ZXJ0LmNvbTExMC8GA1UEAxMoRGlnaUNlcnQgU0hBMiBBc3N1cmVkIElEIENvZGUg
+# U2lnbmluZyBDQTAeFw0yMDA1MTIwMDAwMDBaFw0yMzA2MDgxMjAwMDBaMFcxCzAJ
+# BgNVBAYTAlVTMREwDwYDVQQIEwhWaXJnaW5pYTEPMA0GA1UEBxMGVmllbm5hMREw
+# DwYDVQQKEwhkYmF0b29sczERMA8GA1UEAxMIZGJhdG9vbHMwggEiMA0GCSqGSIb3
+# DQEBAQUAA4IBDwAwggEKAoIBAQC8v2N7q+O/vggBtpjmteofFo140k73JXQ5sOD6
+# QLzjgija+scoYPxTmFSImnqtjfZFWmucAWsDiMVVro/6yGjsXmJJUA7oD5BlMdAK
+# fuiq4558YBOjjc0Bp3NbY5ZGujdCmsw9lqHRAVil6P1ZpAv3D/TyVVq6AjDsJY+x
+# rRL9iMc8YpD5tiAj+SsRSuT5qwPuW83ByRHqkaJ5YDJ/R82ZKh69AFNXoJ3xCJR+
+# P7+pa8tbdSgRf25w4ZfYPy9InEvsnIRVZMeDjjuGvqr0/Mar73UI79z0NYW80yN/
+# 7VzlrvV8RnniHWY2ib9ehZligp5aEqdV2/XFVPV4SKaJs8R9AgMBAAGjggHFMIIB
+# wTAfBgNVHSMEGDAWgBRaxLl7KgqjpepxA8Bg+S32ZXUOWDAdBgNVHQ4EFgQU8MCg
+# +7YDgENO+wnX3d96scvjniIwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsG
+# AQUFBwMDMHcGA1UdHwRwMG4wNaAzoDGGL2h0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNv
+# bS9zaGEyLWFzc3VyZWQtY3MtZzEuY3JsMDWgM6Axhi9odHRwOi8vY3JsNC5kaWdp
+# Y2VydC5jb20vc2hhMi1hc3N1cmVkLWNzLWcxLmNybDBMBgNVHSAERTBDMDcGCWCG
+# SAGG/WwDATAqMCgGCCsGAQUFBwIBFhxodHRwczovL3d3dy5kaWdpY2VydC5jb20v
+# Q1BTMAgGBmeBDAEEATCBhAYIKwYBBQUHAQEEeDB2MCQGCCsGAQUFBzABhhhodHRw
+# Oi8vb2NzcC5kaWdpY2VydC5jb20wTgYIKwYBBQUHMAKGQmh0dHA6Ly9jYWNlcnRz
+# LmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFNIQTJBc3N1cmVkSURDb2RlU2lnbmluZ0NB
+# LmNydDAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCPzflwlQwf1jak
+# EqymPOc0nBxiY7F4FwcmL7IrTLhub6Pjg4ZYfiC79Akz5aNlqO+TJ0kqglkfnOsc
+# jfKQzzDwcZthLVZl83igzCLnWMo8Zk/D2d4ZLY9esFwqPNvuuVDrHvgh7H6DJ/zP
+# Vm5EOK0sljT0UQ6HQEwtouH5S8nrqCGZ8jKM/+DeJlm+rCAGGf7TV85uqsAn5JqD
+# En/bXE1AlyG1Q5YiXFGS5Sf0qS4Nisw7vRrZ6Qc4NwBty4cAYjzDPDixorWI8+FV
+# OUWKMdL7tV8i393/XykwsccCstBCp7VnSZN+4vgzjEJQql5uQfysjcW9rrb/qixp
+# csPTKYRHMIIFMDCCBBigAwIBAgIQBAkYG1/Vu2Z1U0O1b5VQCDANBgkqhkiG9w0B
+# AQsFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
+# VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
+# IElEIFJvb3QgQ0EwHhcNMTMxMDIyMTIwMDAwWhcNMjgxMDIyMTIwMDAwWjByMQsw
+# CQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cu
+# ZGlnaWNlcnQuY29tMTEwLwYDVQQDEyhEaWdpQ2VydCBTSEEyIEFzc3VyZWQgSUQg
+# Q29kZSBTaWduaW5nIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA
+# +NOzHH8OEa9ndwfTCzFJGc/Q+0WZsTrbRPV/5aid2zLXcep2nQUut4/6kkPApfmJ
+# 1DcZ17aq8JyGpdglrA55KDp+6dFn08b7KSfH03sjlOSRI5aQd4L5oYQjZhJUM1B0
+# sSgmuyRpwsJS8hRniolF1C2ho+mILCCVrhxKhwjfDPXiTWAYvqrEsq5wMWYzcT6s
+# cKKrzn/pfMuSoeU7MRzP6vIK5Fe7SrXpdOYr/mzLfnQ5Ng2Q7+S1TqSp6moKq4Tz
+# rGdOtcT3jNEgJSPrCGQ+UpbB8g8S9MWOD8Gi6CxR93O8vYWxYoNzQYIH5DiLanMg
+# 0A9kczyen6Yzqf0Z3yWT0QIDAQABo4IBzTCCAckwEgYDVR0TAQH/BAgwBgEB/wIB
+# ADAOBgNVHQ8BAf8EBAMCAYYwEwYDVR0lBAwwCgYIKwYBBQUHAwMweQYIKwYBBQUH
+# AQEEbTBrMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wQwYI
+# KwYBBQUHMAKGN2h0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEFz
+# c3VyZWRJRFJvb3RDQS5jcnQwgYEGA1UdHwR6MHgwOqA4oDaGNGh0dHA6Ly9jcmw0
+# LmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEFzc3VyZWRJRFJvb3RDQS5jcmwwOqA4oDaG
+# NGh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEFzc3VyZWRJRFJvb3RD
+# QS5jcmwwTwYDVR0gBEgwRjA4BgpghkgBhv1sAAIEMCowKAYIKwYBBQUHAgEWHGh0
+# dHBzOi8vd3d3LmRpZ2ljZXJ0LmNvbS9DUFMwCgYIYIZIAYb9bAMwHQYDVR0OBBYE
+# FFrEuXsqCqOl6nEDwGD5LfZldQ5YMB8GA1UdIwQYMBaAFEXroq/0ksuCMS1Ri6en
+# IZ3zbcgPMA0GCSqGSIb3DQEBCwUAA4IBAQA+7A1aJLPzItEVyCx8JSl2qB1dHC06
+# GsTvMGHXfgtg/cM9D8Svi/3vKt8gVTew4fbRknUPUbRupY5a4l4kgU4QpO4/cY5j
+# DhNLrddfRHnzNhQGivecRk5c/5CxGwcOkRX7uq+1UcKNJK4kxscnKqEpKBo6cSgC
+# PC6Ro8AlEeKcFEehemhor5unXCBc2XGxDI+7qPjFEmifz0DLQESlE/DmZAwlCEIy
+# sjaKJAL+L3J+HNdJRZboWR3p+nRka7LrZkPas7CM1ekN3fYBIM6ZMWM9CBoYs4Gb
+# T8aTEAb8B4H6i9r5gkn3Ym6hU/oSlBiFLpKR6mhsRDKyZqHnGKSaZFHvMIIFMTCC
+# BBmgAwIBAgIQCqEl1tYyG35B5AXaNpfCFTANBgkqhkiG9w0BAQsFADBlMQswCQYD
+# VQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGln
+# aWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVkIElEIFJvb3QgQ0Ew
+# HhcNMTYwMTA3MTIwMDAwWhcNMzEwMTA3MTIwMDAwWjByMQswCQYDVQQGEwJVUzEV
+# MBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29t
+# MTEwLwYDVQQDEyhEaWdpQ2VydCBTSEEyIEFzc3VyZWQgSUQgVGltZXN0YW1waW5n
+# IENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvdAy7kvNj3/dqbqC
+# mcU5VChXtiNKxA4HRTNREH3Q+X1NaH7ntqD0jbOI5Je/YyGQmL8TvFfTw+F+CNZq
+# FAA49y4eO+7MpvYyWf5fZT/gm+vjRkcGGlV+Cyd+wKL1oODeIj8O/36V+/OjuiI+
+# GKwR5PCZA207hXwJ0+5dyJoLVOOoCXFr4M8iEA91z3FyTgqt30A6XLdR4aF5FMZN
+# JCMwXbzsPGBqrC8HzP3w6kfZiFBe/WZuVmEnKYmEUeaC50ZQ/ZQqLKfkdT66mA+E
+# f58xFNat1fJky3seBdCEGXIX8RcG7z3N1k3vBkL9olMqT4UdxB08r8/arBD13ays
+# 6Vb/kwIDAQABo4IBzjCCAcowHQYDVR0OBBYEFPS24SAd/imu0uRhpbKiJbLIFzVu
+# MB8GA1UdIwQYMBaAFEXroq/0ksuCMS1Ri6enIZ3zbcgPMBIGA1UdEwEB/wQIMAYB
+# Af8CAQAwDgYDVR0PAQH/BAQDAgGGMBMGA1UdJQQMMAoGCCsGAQUFBwMIMHkGCCsG
+# AQUFBwEBBG0wazAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29t
+# MEMGCCsGAQUFBzAChjdodHRwOi8vY2FjZXJ0cy5kaWdpY2VydC5jb20vRGlnaUNl
+# cnRBc3N1cmVkSURSb290Q0EuY3J0MIGBBgNVHR8EejB4MDqgOKA2hjRodHRwOi8v
+# Y3JsNC5kaWdpY2VydC5jb20vRGlnaUNlcnRBc3N1cmVkSURSb290Q0EuY3JsMDqg
+# OKA2hjRodHRwOi8vY3JsMy5kaWdpY2VydC5jb20vRGlnaUNlcnRBc3N1cmVkSURS
+# b290Q0EuY3JsMFAGA1UdIARJMEcwOAYKYIZIAYb9bAACBDAqMCgGCCsGAQUFBwIB
+# FhxodHRwczovL3d3dy5kaWdpY2VydC5jb20vQ1BTMAsGCWCGSAGG/WwHATANBgkq
+# hkiG9w0BAQsFAAOCAQEAcZUS6VGHVmnN793afKpjerN4zwY3QITvS4S/ys8DAv3F
+# p8MOIEIsr3fzKx8MIVoqtwU0HWqumfgnoma/Capg33akOpMP+LLR2HwZYuhegiUe
+# xLoceywh4tZbLBQ1QwRostt1AuByx5jWPGTlH0gQGF+JOGFNYkYkh2OMkVIsrymJ
+# 5Xgf1gsUpYDXEkdws3XVk4WTfraSZ/tTYYmo9WuWwPRYaQ18yAGxuSh1t5ljhSKM
+# Ycp5lH5Z/IwP42+1ASa2bKXuh1Eh5Fhgm7oMLSttosR+u8QlK0cCCHxJrhO24XxC
+# QijGGFbPQTS2Zl22dHv1VjMiLyI2skuiSpXY9aaOUjGCBFwwggRYAgEBMIGGMHIx
+# CzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3
+# dy5kaWdpY2VydC5jb20xMTAvBgNVBAMTKERpZ2lDZXJ0IFNIQTIgQXNzdXJlZCBJ
+# RCBDb2RlIFNpZ25pbmcgQ0ECEAMFu4YhsKFjX7/erhIE520wCQYFKw4DAhoFAKB4
+# MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQB
+# gjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkE
+# MRYEFFM8m9HnhBCstblrVdkAYJCupdcnMA0GCSqGSIb3DQEBAQUABIIBADto+/dV
+# +RLiSOhJk9rZj7N3SUsYy8H01RUDmZEiTEzupFmiuvKa4cF+Y2fPDBGLqtJy7R3z
+# SgXB99Li3355ql4+nJZwqDLLCKyd+izEMPcMCpAKcEf31eBTNVzuUGuBE/CVTsmz
+# 8/woo5mZTAxMP8bNXyP27xucX/ePfTl5bktcwm/jswxoaY1iAaQSaV0UGAvxZ/eb
+# 31lLfim4fOv5lVSUgKLaWYoE9FQbsN2WOT8DRny0pxSTBZzEkSK3lxom+hd9aB2s
+# DV4WeIbB3bpzQmuJW1pk+rZcdpjL03127hb8tHTulKcJtHZAaHQlXFJn6agV3KH7
+# mQxo6c9heUbxyPmhggIwMIICLAYJKoZIhvcNAQkGMYICHTCCAhkCAQEwgYYwcjEL
+# MAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3
+# LmRpZ2ljZXJ0LmNvbTExMC8GA1UEAxMoRGlnaUNlcnQgU0hBMiBBc3N1cmVkIElE
+# IFRpbWVzdGFtcGluZyBDQQIQDUJK4L46iP9gQCHOFADw3TANBglghkgBZQMEAgEF
+# AKBpMBgGCSqGSIb3DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIx
+# MDgxMTA4MjUwNlowLwYJKoZIhvcNAQkEMSIEIDpbi01Kxrl8eHgktfkSIvRDXvYh
+# Pb64Cav+Zci8SBmwMA0GCSqGSIb3DQEBAQUABIIBAHIJoDFi6ITxLykY7vFIKos6
+# /ZFUBSwIiZ2pT+7vS/Ndn081i1IOxE+q7ePbifdQhaPZlHBicXKwTWLt7GYYcz49
+# C6SOm+eXFdQiDtyg3Pt8yz6UAH7rznKshsGabsWvJ8cNIe9kBVqme/55cd4x2orW
+# xJxUOHtDem1NSVpSLJ718OLgykrSrNBAajW54+KGQdXnrNArrvf7sC5qVxOdYeDD
+# /oSe1FozX4B7kyNv8AwgTqohSB/EIAY3Wq6CoeFDuh+k9fnBp/jvEa8NxiuqBGMB
+# 3dORdUbekecn7c/LQYpOYfLO7nnrtn3NIv59shUMaq+S1dFPctElfUtnoyUOebA=
+# SIG # End signature block
