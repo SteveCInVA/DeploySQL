@@ -9,16 +9,20 @@ select @SystemRootPath = replace(physical_name, '\DATA\Master.mdf', '\Audit\')
 from sys.master_files 
 where database_id = 1 and name = 'master' 
 
-select @SystemRootPath 
+--select @SystemRootPath 
 
 EXECUTE @ReturnCode = dbo.xp_create_subdir @SystemRootPath IF @ReturnCode <> 0 RAISERROR('Error creating directory.', 16, 1) 
+
+--select @ReturnCode
 
 set @sqlcmd = 'CREATE SERVER AUDIT [MSSQLSERVER_PrivledgeUse] TO FILE 
 ( FILEPATH = N''' + @SystemRootPath + '''
 ,MAXSIZE = 100 MB 
 ,MAX_ROLLOVER_FILES = 100 
 ,RESERVE_DISK_SPACE = ON 
-) WITH (QUEUE_DELAY = 1000, ON_FAILURE = SHUTDOWN, AUDIT GUID = ''19671018-446f-6871-7479-4036b61489d8'')' 
+) WITH (QUEUE_DELAY = 1000, ON_FAILURE = SHUTDOWN, AUDIT_GUID = ''19671018-446f-6871-7479-4036b61489d8'')' 
+
+--select @sqlcmd
 
 exec sp_executesql @sqlcmd 
 
