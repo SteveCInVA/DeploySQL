@@ -76,6 +76,8 @@
  - Added support to ensure the required powershell modules were installed on the installing worksatation
  - Added in several parameter validations
  - Moved validation procedures to external modules
+ 2021/08/13 - 1.3.0 - Added support of service accounts
+ - fully tested sql config scripts
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -132,7 +134,7 @@ param (
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
-$scriptVersion = '1.2.0' 
+$scriptVersion = '1.3.0' 
 $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
 
 ##########################################
@@ -168,6 +170,20 @@ foreach ($acct in $DBASQLAdminGroup) {
     }
 }
 
+# check SQL Engine service account if present
+IF ($null -ne $SQLEngineServiceAccount) { 
+    if ((Test-AccountCredential -Credential $SQLEngineServiceAccount) -eq $false) {
+        $valid = $false
+    }
+} 
+
+# check SQL agent service account if present
+IF ($null -ne $SQLAgentServiceAccount) { 
+    if ((Test-AccountCredential -Credential $SQLAgentServiceAccount) -eq $false) {
+        $valid = $false
+    }
+} 
+
 # check install credential is valid 
 IF ($null -eq $InstallCredential) { 
     Write-Warning "User clicked cancel at credential prompt." 
@@ -179,6 +195,7 @@ ELSE {
     }
 } 
 
+# test reach target computer(s)
 FOREACH ($c in $Computer) {
     IF (!(Test-Connection -ComputerName $c -Quiet)) { 
         Write-Warning "Unable to connect to $c" 
@@ -186,6 +203,7 @@ FOREACH ($c in $Computer) {
     } 
 }
 
+# test you can reach installation media
 IF (!(Test-Path $InstallSourcePath)) { 
     Write-Warning "Unable to connect to $InstallSourcePath" 
     $valid = $false
