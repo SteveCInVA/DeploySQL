@@ -99,13 +99,13 @@ param (
     [string]$NumberOfNonOSDrives = '5', 
 
     [Parameter (Mandatory = $false)] 
-    [string]$InstallSourcePath = '\\server\ServerBuildScripts', 
+    [string]$InstallSourcePath = "\\$env:COMPUTERNAME\DeploySQL", 
 
     [Parameter (Mandatory = $false)] 
-    [string]$SQLEngineServiceAccount, 
+    [System.Management.Automation.PSCredential]$SQLEngineServiceAccount, 
 
     [Parameter (Mandatory = $false)] 
-    [string]$SQLAgentServiceAccount, 
+    [System.Management.Automation.PSCredential]$SQLAgentServiceAccount, 
 
     [Parameter (Mandatory = $false)] 
     [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
@@ -113,19 +113,19 @@ param (
     [Parameter (Mandatory = $false)] 
     [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
 
-    [Switch]$NoOpticalDrive,
+    [switch]$IsAzureVM,
 
     [Switch]$SkipDriveConfig, 
 
-    [switch]$IsAzureVM,
+    [Switch]$NoOpticalDrive,
 
     [switch]$AddOSAdminToHostAdmin,
 
     [switch]$SkipSSMS,
 
-    [Switch]$SkipPostDeployment,
-
     [Switch]$SkipReboot,
+
+    [Switch]$SkipPostDeployment,
 
     [Parameter (Mandatory = $false)] 
     [System.Management.Automation.PSCredential] 
@@ -499,6 +499,8 @@ Configuration InstallSQLEngine
             InstanceName          = $SQLInstance 
             SourcePath            = "C:\Software\$SQLVersion" 
             Features              = 'SQLENGINE,CONN,BC' 
+            SQLSvcAccount         = $SQLEngineServiceAccount
+            AgtSvcAccount         = $SQLAgentServiceAccount
             SQLSysAdminAccounts   = @($DBASQLAdminGroup)
             InstallSQLDataDir     = "$SQLSystemDir" 
             SQLUserDBDir          = "$SQLUserDBDir" 

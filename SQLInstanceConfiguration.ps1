@@ -82,7 +82,7 @@ Invoke-DbaQuery -SqlInstance $SqlSvrInstance -Database master -File "$InstallSou
 Write-Verbose "Create standard backup plan - https://ola.hallengren.com/downloads.html"
 #needed to move to Invoke-SqlCMD instead of Invoke-DBAQuery due to an issue where the Maintenance solution script is too large
 Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\Scripts\MaintenanceSolution.sql" 
-Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\Scripts\MaintenanceSolution-Configurations.sql" 
+Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\Scripts\MaintenanceSolution-Configuration.sql" 
 Invoke-Sqlcmd -ServerInstance $SqlSvrInstance -Database master -InputFile "$InstallSourcePath\Scripts\MaintenanceSolution-Scheduling.sql" 
  
 #install who is active 
