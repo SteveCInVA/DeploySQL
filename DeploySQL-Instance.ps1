@@ -123,6 +123,8 @@ param (
 
     [switch]$AddOSAdminToHostAdmin,
 
+    [switch]$IsInAvailablityGroup,
+
     [switch]$SkipSSMS,
 
     [Switch]$SkipReboot,
@@ -484,7 +486,6 @@ Configuration InstallSQLEngine
 
     Node $AllNodes.NodeName 
     { 
-
         #Configure power plan for high performance 
         PowerPlan PwrPlan { 
             IsSingleInstance = 'Yes' 
@@ -703,6 +704,193 @@ Configuration InstallSQLEngine
     } 
 } 
 
+Configuration ConfigureAG
+{
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Import-DscResource -ModuleName NetworkingDsc 
+    Import-DscResource -ModuleName xFailoverCluster
+    Import-DscResource -ModuleName SqlServerDsc 
+
+    Node $AllNodes.NodeName
+    {
+        WindowsFeature FailoverFeature
+        {
+            Ensure = "Present"
+            Name = "Failover-Clustering"
+        }
+        WindowsFeature RSATClusteringMgmt
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-Mgmt"
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        WindowsFeature RSATClusteringPowerShell
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-PowerShell"
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        WindowsFeature RSATClusteringCmdInterface
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-CmdInterface"
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        <#
+        NetIPInterface DisableDhcp
+        {
+            InterfaceAlias = $node.InterfaceAlias
+            AddressFamily = $node.AddressFamily
+            Dhcp           = 'Disabled'
+        }
+        IPAddress setStaticIPAddress
+        {
+            InterfaceAlias = $node.InterfaceAlias
+            AddressFamily = $node.AddressFamily
+            KeepExistingAddress = $true
+        }
+        DnsServerAddress DnsServerAddress
+        {
+            Address        = $DNSAddress
+            InterfaceAlias = $node.InterfaceAlias
+            AddressFamily = $node.AddressFamily
+            Validate       = $true
+        }
+        #>
+    }
+
+    Node $AllNodes.Where{ $_.NodeType -eq "Primary"}.NodeName
+    {
+        xCluster createOrJoinCluster
+        {
+            Name = $Node.ClusterName
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        SqlAlwaysOnService EnableAlwaysOnPrimary
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            RestartTimeout       = 120
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[xCluster]createOrJoinCluster"
+        }
+        # Adding the required service account to allow the cluster to log into SQL
+        SqlLogin AddNTServiceClusSvcPrimary
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[SqlAlwaysOnService]EnableAlwaysOnPrimary"
+        }
+        # Add the required permissions to the cluster service login
+        SqlPermission AddNTServiceClusSvcPermissionsPrimary
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn            = "[SqlLogin]AddNTServiceClusSvcPrimary"
+        }
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint HADREndpoint_Primary
+        {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[SqlPermission]AddNTServiceClusSvcPermissionsPrimary"
+        }
+        # Create the availability group on the instance tagged as the primary replica
+        SqlAG AddTestAG
+        {
+            Ensure               = 'Present'
+            Name                 = 'TestAG'
+            InstanceName         = $SQLInstance
+            ServerName           = $Node.NodeName
+
+            DependsOn            = '[SqlAlwaysOnService]EnableAlwaysOnPrimary', '[SqlEndpoint]HADREndpoint_Primary', '[SqlPermission]AddNTServiceClusSvcPermissionsPrimary'
+
+            PsDscRunAsCredential = $InstallCredential
+        }        
+    }
+    Node $AllNodes.Where{ $_.NodeType -eq "Secondary"}.NodeName
+    {
+        xWaitForCluster waitForCluster
+        {
+            Name = $Node.ClusterName
+            RetryIntervalSec = 10
+            RetryCount = 60
+        }
+        xCluster joinCluster
+        {
+            Name = $Node.ClusterName
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[xWaitForCluster]waitForCluster"
+        }
+        SqlAlwaysOnService EnableAlwaysOnSecondary
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            RestartTimeout       = 120
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[xCluster]joinCluster"
+        }
+        # Adding the required service account to allow the cluster to log into SQL
+        SqlLogin AddNTServiceClusSvcSecondary
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[SqlAlwaysOnService]EnableAlwaysOnSecondary"
+        }
+        # Add the required permissions to the cluster service login
+        SqlPermission AddNTServiceClusSvcPermissionsSecondary
+        {
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn            = "[SqlLogin]AddNTServiceClusSvcSecondary"
+        }
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint HADREndpoint_Secondary
+        {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+
+            PsDscRunAsCredential = $InstallCredential
+            DependsOn = "[SqlPermission]AddNTServiceClusSvcPermissionsSecondary"
+        }    
+    }
+}
+
 [System.Collections.ArrayList]$s = $Computer
 $s.Remove($Computer[0])
 $p = $Computer[0]
@@ -718,6 +906,14 @@ $config = @{
             SkipSSMS                    = $SkipSSMS.IsPresent
             AddOSAdminToHostAdmin       = $AddOSAdminToHostAdmin.IsPresent
             NumberOfDataDrives          = $NumberOfNonOSDrives
+
+            DnsAddress                 = '10.0.1.5'
+            InterfaceAlias             = "Ethernet 2"
+            AddressFamily              = 'IPv4'
+            DefaultGateway             = '10.0.1.1'
+            SubnetMask                 = 24
+
+            ClusterName                = 'SQLCluster1'
         }
     )
 } 
@@ -725,12 +921,14 @@ $config = @{
 $config.AllNodes += @{
     NodeName                    = $p
     NodeType                    = 'Primary'
+    IPAddress                   = '10.0.1.6'
 }
 # configuration specific to all other nodes
 foreach ($c in $s) {
     $config.AllNodes += @{
         NodeName                    = $c 
         NodeType                    = 'Secondary'
+        IPAddress                   = '10.0.1.7'
     }
 }
 
@@ -756,6 +954,13 @@ if ($SkipDriveConfig.isPresent -eq $false) {
 #Install SQL 
 InstallSQLEngine -ConfigurationData $config -OutputPath "$Dir\MOF\SQLConfig" 
 Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+
+#Configure IsInAvailablityGroup
+if ($IsInAvailablityGroup.IsPresent -eq $true)
+{
+    ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\SQLAG" 
+    Start-DscConfiguration -Path "$Dir\MOF\SQLAG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+}
 
 if ($SkipReboot.IsPresent -eq $false) {
     #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
