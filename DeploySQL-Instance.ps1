@@ -22,7 +22,7 @@
  - Install current version of SQL Server Management Studio 
  - Disable Client Improvement Experience 
  - Ensure DBATeam is granted file system permissions to necessary SQL folders 
- - Restarts target computer 
+ - Configures Windows Cluster / Availablity Group
  - Execute SQL Server Post Installation Configuration Script .\SQLInstanceConfiguration.ps1 
   
  .INPUTS
@@ -37,18 +37,34 @@
  
  [-InstallSourcePath <string>] - Path to installation base. Should be a UNC Path such as \\server\SQLInstallation 
  
+ [-SQLEngineServiceAccount <pscredential>] - Credential used to execute the SQL Server Service
+
+ [-SQLAgentServiceAccount <pscredential>] - Credential used to execute the SQL Agent Service
+
  [-DBAOSAdminGroup [string[]]] - Active directory group used for administration of SQL Server host machine. 
  
  [-DBASQLAdminGroup [string[]]] - Active directory group used for administration of SQL Server databases and service. 
  
- [-SkipDriveConfig <boolean>] - Boolean value (True/False) to use to prevent initial drive configuration. Default is False. 
+ [-IsAzureVM] - Switch that if present will offset all drive letters by +1.  By default without this switch the assumption is that the first non-OS drive is D:\.  In Azure the first availble non-OS drive is E:\
+
+ [-SkipDriveConfig] - Switch used to use to prevent initial drive configuration. Default is False. 
+
+ [-SkipSQLInstall] - Switch is used to skip SQL Server installation (will not confiugre firewall, SSMS, PowerPlan, Timezone)
 
  [-NoOpticalDrive] - Script assumes target(s) have an optical drive.  This switch will skip configuration if not present.
- [-SkipSSMS] - switch that if included will skip the installation of SSMS
+ 
  [-AddOSAdminToHostAdmin] - switch that if included will add members of the DBAOSAdminGroup to local machine administrators
- [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
- [-SkipPostDeployment] - switch that if included will not run post installation scripts
- [-SkipReboot] - switch that if included will skip the reboot at the end of the cycle
+ 
+ [-IsInAvailabilityGroup] - Master switch that if enabled will create a Windows Cluster and a SQL Server Availablity Group.
+ [-ClusterName [string]] - Required if -IsInAvailablityGroup is specified.  Name of the Windows Cluster
+ [-ClusterIP [System.Net.IPAddress]] - optional. if present will configure the cluster with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availablity Group
+ [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availablity group with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGPort [UInt16]] - required if -IsInAvailablityGroup is specified.  Port for Availablity Group Listener
+
+ [-SkipSSMS] - switch that if included will skip the installation of SSMS
+ 
+ [-SkipPostDeployment] - switch that if included will not run SQL Server post installation scripts
  
  -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
@@ -133,7 +149,7 @@ param (
     [Parameter (Mandatory = $false)]
     [System.Net.IPAddress]$ClusterIP,
     [Parameter (Mandatory = $false)]
-    [string]$AGName,
+    [string]$SQLAGName,
     [Parameter (Mandatory = $false)]
     [System.Net.IPAddress]$SQLAGIPAddr,
     [Parameter (Mandatory = $false)]
@@ -232,10 +248,15 @@ IF ($IsInAvailablityGroup.IsPresent -eq $true){
         Write-Warning "IsInAvailabilityGroup parameter is specified but ClusterName is missing"
         $valid = $false
     }
-    IF ($AGName.length -eq 0){
-        Write-Warning "IsInAvailabilityGroup parameter is specified but AGName is missing"
+    IF ($SQLAGName.length -eq 0){
+        Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGName is missing"
         $valid = $false
     }
+    IF ($SQLAGPort.length -eq 0){
+        Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGPort is missing"
+        $valid = $false
+    }
+    
 }
 
 ##########################################
@@ -1021,7 +1042,7 @@ $config = @{
 
             ClusterName                = $ClusterName
             ClusterIP                  = $ClusterIP
-            AvailablityGroupName       = $AGName
+            AvailablityGroupName       = $SQLAGName
             AvailabilityGroupIP        = $SQLAGIPAddr
             AvailabilityGroupPort      = $SQLAGPort
         }
@@ -1040,7 +1061,7 @@ foreach ($c in $s) {
     }
 }
 
-$config.AllNodes | out-string | write-host
+#$config.AllNodes | out-string | write-host
 
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
@@ -1072,8 +1093,8 @@ if ($IsInAvailablityGroup.IsPresent -eq $true)
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-    #write-host "##### Starting sleep cycle @ " (get-date)
-    #Start-Sleep -Seconds 300 
+    write-host "##### Starting sleep cycle @ " (get-date)
+    Start-Sleep -Seconds 300 
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
     Start-DscConfiguration -Path "$Dir\MOF\AG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
@@ -1092,4 +1113,4 @@ if ($SkipPostDeployment.IsPresent -eq $false) {
 }
 
 # remove mof files generated during install
-#remove-item "$Dir\MOF" -Force -Recurse
+remove-item "$Dir\MOF" -Force -Recurse
