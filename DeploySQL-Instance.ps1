@@ -22,7 +22,7 @@
  - Install current version of SQL Server Management Studio 
  - Disable Client Improvement Experience 
  - Ensure DBATeam is granted file system permissions to necessary SQL folders 
- - Restarts target computer 
+ - Configures Windows Cluster / Availablity Group
  - Execute SQL Server Post Installation Configuration Script .\SQLInstanceConfiguration.ps1 
   
  .INPUTS
@@ -37,18 +37,34 @@
  
  [-InstallSourcePath <string>] - Path to installation base. Should be a UNC Path such as \\server\SQLInstallation 
  
+ [-SQLEngineServiceAccount <pscredential>] - Credential used to execute the SQL Server Service
+
+ [-SQLAgentServiceAccount <pscredential>] - Credential used to execute the SQL Agent Service
+
  [-DBAOSAdminGroup [string[]]] - Active directory group used for administration of SQL Server host machine. 
  
  [-DBASQLAdminGroup [string[]]] - Active directory group used for administration of SQL Server databases and service. 
  
- [-SkipDriveConfig <boolean>] - Boolean value (True/False) to use to prevent initial drive configuration. Default is False. 
+ [-IsAzureVM] - Switch that if present will offset all drive letters by +1.  By default without this switch the assumption is that the first non-OS drive is D:\.  In Azure the first availble non-OS drive is E:\
+
+ [-SkipDriveConfig] - Switch used to use to prevent initial drive configuration. Default is False. 
+
+ [-SkipSQLInstall] - Switch is used to skip SQL Server installation (will not confiugre firewall, SSMS, PowerPlan, Timezone)
 
  [-NoOpticalDrive] - Script assumes target(s) have an optical drive.  This switch will skip configuration if not present.
- [-SkipSSMS] - switch that if included will skip the installation of SSMS
+ 
  [-AddOSAdminToHostAdmin] - switch that if included will add members of the DBAOSAdminGroup to local machine administrators
- [-RunningInAzure] - switch that if included, will offset all drives by 1.  In Azure, there is a D: already present that needs to be skipped... in other customers, the drive doesn't exist.
- [-SkipPostDeployment] - switch that if included will not run post installation scripts
- [-SkipReboot] - switch that if included will skip the reboot at the end of the cycle
+ 
+ [-IsInAvailabilityGroup] - Master switch that if enabled will create a Windows Cluster and a SQL Server Availablity Group.
+ [-ClusterName [string]] - Required if -IsInAvailablityGroup is specified.  Name of the Windows Cluster
+ [-ClusterIP [System.Net.IPAddress]] - optional. if present will configure the cluster with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availablity Group
+ [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availablity group with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGPort [UInt16]] - required if -IsInAvailablityGroup is specified.  Port for Availablity Group Listener
+
+ [-SkipSSMS] - switch that if included will skip the installation of SSMS
+ 
+ [-SkipPostDeployment] - switch that if included will not run SQL Server post installation scripts
  
  -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
@@ -78,6 +94,7 @@
  - Moved validation procedures to external modules
  2021/08/13 - 1.3.0 - Added support of service accounts
  - fully tested sql config scripts
+ 2021/09/01 - 1.4.0 - Add support for availablity groups
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -119,9 +136,25 @@ param (
 
     [Switch]$SkipDriveConfig, 
 
+    [Switch]$SkipSQLInstall,
+
     [Switch]$NoOpticalDrive,
 
     [switch]$AddOSAdminToHostAdmin,
+
+    #params needed for clustering
+    [switch]$IsInAvailablityGroup,
+    [Parameter (Mandatory = $false)]
+    [string]$ClusterName,
+    [Parameter (Mandatory = $false)]
+    [System.Net.IPAddress]$ClusterIP,
+    [Parameter (Mandatory = $false)]
+    [string]$SQLAGName,
+    [Parameter (Mandatory = $false)]
+    [System.Net.IPAddress]$SQLAGIPAddr,
+    [Parameter (Mandatory = $false)]
+    [ValidateRange(1, [UInt16]::MaxValue)]
+    [UInt16]$SQLAGPort,
 
     [switch]$SkipSSMS,
 
@@ -134,7 +167,7 @@ param (
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
-$scriptVersion = '1.3.0' 
+$scriptVersion = '1.4.0' 
 $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
 
 ##########################################
@@ -209,6 +242,23 @@ IF (!(Test-Path $InstallSourcePath)) {
     $valid = $false
 } 
 
+# test if isInAvailablityGroup is specified, that the cluster name and ag name is specified
+IF ($IsInAvailablityGroup.IsPresent -eq $true){
+    IF ($clusterName.length -eq 0){
+        Write-Warning "IsInAvailabilityGroup parameter is specified but ClusterName is missing"
+        $valid = $false
+    }
+    IF ($SQLAGName.length -eq 0){
+        Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGName is missing"
+        $valid = $false
+    }
+    IF ($SQLAGPort.length -eq 0){
+        Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGPort is missing"
+        $valid = $false
+    }
+    
+}
+
 ##########################################
 # end of validations...  if any tests fail, quit
 if ($valid -eq $false) {
@@ -243,6 +293,11 @@ if ($IsAzureVM.IsPresent -eq $true) {
 else {
     $driveOffset = 0
 }
+
+# identify primary vs secondary computers for clustering
+[System.Collections.ArrayList]$s = $Computer
+$s.Remove($Computer[0]) # Secondary computers
+$p = $Computer[0]   # primary computer
 
 #Configure DrivePath Variables 
 switch ($NumberOfNonOSDrives) { 
@@ -296,7 +351,7 @@ Configuration LCMConfig
         LocalConfigurationManager { 
             ActionAfterReboot  = 'ContinueConfiguration' 
             ConfigurationMode  = 'ApplyOnly' 
-            RebootNodeIfNeeded = $False 
+            RebootNodeIfNeeded = $true 
         } 
     } 
 } 
@@ -484,7 +539,6 @@ Configuration InstallSQLEngine
 
     Node $AllNodes.NodeName 
     { 
-
         #Configure power plan for high performance 
         PowerPlan PwrPlan { 
             IsSingleInstance = 'Yes' 
@@ -703,9 +757,276 @@ Configuration InstallSQLEngine
     } 
 } 
 
-[System.Collections.ArrayList]$s = $Computer
-$s.Remove($Computer[0])
-$p = $Computer[0]
+Configuration ConfigureCluster
+{
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Import-DscResource -ModuleName ComputerManagementDsc
+    Import-DscResource -ModuleName xFailoverCluster
+
+    #base feature install
+    Node $AllNodes.NodeName
+    {
+        WindowsFeature FailoverFeature
+        {
+            Ensure = "Present"
+            Name = "Failover-Clustering"
+        }
+        PendingReboot AfterClusterFeature
+        {
+            Name = "AfterClusterFeature"
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        WindowsFeature RSATClusteringMgmt
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-Mgmt"
+            DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
+        }
+        WindowsFeature RSATClusteringPowerShell
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-PowerShell"
+            DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
+        }
+        WindowsFeature RSATClusteringCmdInterface
+        {
+            Ensure = "Present"
+            Name = "RSAT-Clustering-CmdInterface"
+            DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
+        }
+    }
+
+    Node $AllNodes.Where{ $_.NodeType -eq "Primary"}.NodeName
+    {
+        if($Node.ClusterIP.length -eq 0 ){
+        # Cluster IP Address not specified - using DHCP
+        xCluster createCluster
+        {
+            Name = $Node.ClusterName
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+    }
+    else
+    {
+        # Cluster IP Address specified - using ClusterIP
+        xCluster createCluster
+        {
+            Name = $Node.ClusterName
+            StaticIPAddress = $Node.ClusterIP
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }   
+    }
+    }
+    Node $AllNodes.Where{ $_.NodeType -eq "Secondary"}.NodeName
+    {
+        xWaitForCluster waitForCluster
+        {
+            Name = $Node.ClusterName
+            RetryIntervalSec = 10
+            RetryCount = 60
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }
+        xCluster joinCluster
+        {
+            Name = $Node.ClusterName
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[xWaitForCluster]waitForCluster"
+        }
+    }
+}
+
+Configuration ConfigureAG
+{
+    Import-DscResource -ModuleName PSDesiredStateConfiguration 
+    Import-DscResource -ModuleName xFailoverCluster
+    Import-DscResource -ModuleName SqlServerDSC
+    
+    Node $AllNodes.NodeName
+    {
+        xWaitForCluster waitForCluster
+        {
+            Name = $Node.ClusterName
+            RetryIntervalSec = 10
+            RetryCount = 60
+        }
+
+        # Ensure SQL Engine account is granted access to server
+        SqlLogin Add_WindowsUserSQLEngineAcct
+        {
+            Ensure               = 'Present'
+            Name                 = $SQLEngineServiceAccount.userName
+            ServerName           = $Node.NodeName
+            LoginType            = 'WindowsUser'
+            InstanceName         = $SQLInstance
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Ensure SQL Agent account is granted access to server
+        SqlLogin Add_WindowsUserSQLAgentAcct
+        {
+            Ensure               = 'Present'
+            Name                 = $SQLAgentServiceAccount.userName
+            ServerName           = $Node.NodeName
+            LoginType            = 'WindowsUser'
+            InstanceName         = $SQLInstance
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Ensure cluster account is granted access to server
+        SqlLogin Add_WindowsUserClusSvc
+        {
+            Ensure               = 'Present'
+            Name                 = 'NT Service\ClusSvc'
+            ServerName           = $Node.NodeName
+            LoginType            = 'WindowsUser'
+            InstanceName         = $SQLInstance
+            PsDscRunAsCredential = $InstallCredential
+        }
+
+        # Add the required permissions to the sql engine service login
+        SqlPermission AddNTServiceSQLEngineSvcPermissions
+        {
+            DependsOn            = '[SqlLogin]Add_WindowsUserSQLEngineAcct'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            Principal            = $SQLEngineServiceAccount.userName
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Add the required permissions to the sql agent service login
+        SqlPermission AddNTServiceSQLAgentSvcPermissions
+        {
+            DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            Principal            = $SQLAgentServiceAccount.userName
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Add the required permissions to the cluster service login
+        SqlPermission AddNTServiceClusSvcPermissions
+        {
+            DependsOn            = '[SqlLogin]Add_WindowsUserClusSvc'
+            Ensure               = 'Present'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+            Principal            = 'NT SERVICE\ClusSvc'
+            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Ensure the HADR option is enabled for the instance
+        SqlAlwaysOnService EnableHADR
+        {
+            Ensure               = 'Present'
+            InstanceName         = $SQLInstance
+            ServerName           = $Node.NodeName
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Create a DatabaseMirroring endpoint
+        SqlEndpoint HADREndpoint
+        {
+            EndPointName         = 'Hadr_endpoint'
+            EndpointType         = 'DatabaseMirroring'
+            Ensure               = 'Present'
+            Port                 = 5022
+            ServerName           = $Node.NodeName
+            InstanceName         = $SQLInstance
+
+            PsDscRunAsCredential = $InstallCredential
+        }
+        # Add permission of Service Account to each Endpoint
+        SqlEndpointPermission 'SQLConfigureEndpointPermission'
+        {
+            Ensure               = 'Present'
+            Name                 = 'Hadr_endpoint'
+            ServerName           = $Node.NodeName
+            InstanceName         = $SqlInstance
+            Principal            = $SQLEngineServiceAccount.userName
+            Permission           = 'CONNECT'
+            DependsOn            = '[SQLEndpoint]HADREndpoint'
+        
+            PsDscRunAsCredential = $SqlAdministratorCredential
+       }
+        if ($Node.NodeType -eq 'Primary')
+        {
+            SQLAG AddAG
+            {
+                Ensure          = 'Present'
+                Name            = $Node.AvailablityGroupName
+                ServerName      = $Node.NodeName
+                InstanceName    = $SqlInstance
+                AvailabilityMode = 'SynchronousCommit'
+                FailoverMode    = 'Automatic'
+                DatabaseHealthTrigger = $true
+                DtcSupportEnabled = $true
+                DependsOn       = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[SQLAlwaysOnService]EnableHADR', '[SqlPermission]AddNTServiceClusSvcPermissions'
+
+                PsDscRunAsCredential = $InstallCredential
+            } 
+            # handle if the server is configured with DHCP or static addresses
+            if ($node.AvailabilityGroupIP.length -gt 0)
+            {
+                SQLAGListener AGListener
+                {
+                    Ensure = 'Present'
+                    ServerName      = $Node.NodeName
+                    InstanceName    = $SqlInstance
+                    AvailabilityGroup = $Node.AvailabilityGroupName
+                    Name = $Node.AvailabilityGroupName
+                    Port = $Node.AvailabilityGroupPort
+                    IPAddress = $Node.AvailabilityGroupIP
+                    DependsOn = '[SQLAG]AddAG'                
+            
+                    PsDscRunAsCredential = $InstallCredential
+                }
+            }
+            else
+            {
+                SQLAGListener AGListener
+                {
+                    Ensure = 'Present'
+                    ServerName      = $Node.NodeName
+                    InstanceName    = $SqlInstance
+                    AvailabilityGroup = $Node.AvailabilityGroupName
+                    Name = $Node.AvailabilityGroupName
+                    Port = $Node.AvailabilityGroupPort
+                    DHCP = $True
+                    DependsOn = '[SQLAG]AddAG'                
+
+                    PsDscRunAsCredential = $InstallCredential
+                }
+            }
+        }
+        if ($Node.NodeType -eq 'Secondary')
+        {
+            WaitForAll AGWait
+            {
+                ResourceName            = '[SQLAG]AddAG'
+                NodeName                = ($AllNodes | Where-Object {$_.NodeType -eq 'Primary'}).NodeName
+                RetryIntervalSec        = 20
+                RetryCount              = 30
+                PsDscRunAsCredential    = $InstallCredential
+            }
+            SQLAGReplica AddReplica
+            {
+                Ensure                  ='Present'
+                Name                    = $Node.NodeName
+                AvailabilityGroupName   = $Node.AvailablityGroupName
+                ServerName              = $Node.NodeName
+                InstanceName            = $SqlInstance
+                AvailabilityMode        = 'SynchronousCommit'
+                FailoverMode            = 'Automatic'
+                PrimaryReplicaServerName = ($AllNodes | Where-Object {$_.NodeType -eq 'Primary'}).NodeName
+                PrimaryReplicaInstanceName = $SqlInstance
+                DependsOn               = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[WaitForAll]AGWait'
+
+                PsDscRunAsCredential    = $InstallCredential
+            }
+        }
+    }
+}
 
 # Setup our configuration data object that will be used by our DSC configurations 
 $config = @{ 
@@ -718,6 +1039,12 @@ $config = @{
             SkipSSMS                    = $SkipSSMS.IsPresent
             AddOSAdminToHostAdmin       = $AddOSAdminToHostAdmin.IsPresent
             NumberOfDataDrives          = $NumberOfNonOSDrives
+
+            ClusterName                = $ClusterName
+            ClusterIP                  = $ClusterIP
+            AvailablityGroupName       = $SQLAGName
+            AvailabilityGroupIP        = $SQLAGIPAddr
+            AvailabilityGroupPort      = $SQLAGPort
         }
     )
 } 
@@ -753,13 +1080,24 @@ if ($SkipDriveConfig.isPresent -eq $false) {
     Start-DscConfiguration -Path "$Dir\MOF\DiskConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 }
 
-#Install SQL 
-InstallSQLEngine -ConfigurationData $config -OutputPath "$Dir\MOF\SQLConfig" 
-Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+if ($SkipSQLInstall.isPresent -eq $false) {
+    #Install SQL 
+    InstallSQLEngine -ConfigurationData $config -OutputPath "$Dir\MOF\SQLConfig" 
+    Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+}
 
-if ($SkipReboot.IsPresent -eq $false) {
-    #reboot server on completion (wait for up to 30 minutes for powershell to be available) 
-    restart-computer -ComputerName $Computer -Wait -for Powershell -Timeout 1800 -Delay 2 -Protocol WSMan
+#Configure IsInAvailablityGroup
+if ($IsInAvailablityGroup.IsPresent -eq $true)
+{
+    ConfigureCluster -ConfigurationData $config -OutputPath "$Dir\MOF\Cluster" 
+    Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
+
+    # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
+    write-host "##### Starting sleep cycle @ " (get-date)
+    Start-Sleep -Seconds 300 
+
+    ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
+    Start-DscConfiguration -Path "$Dir\MOF\AG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
 }
 
 if ($SkipPostDeployment.IsPresent -eq $false) {
@@ -775,4 +1113,4 @@ if ($SkipPostDeployment.IsPresent -eq $false) {
 }
 
 # remove mof files generated during install
-# remove-item "$Dir\MOF" -Force -Recurse
+remove-item "$Dir\MOF" -Force -Recurse

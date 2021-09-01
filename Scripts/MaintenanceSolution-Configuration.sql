@@ -40,12 +40,12 @@ EXEC msdb.dbo.sp_update_jobstep
 ,@command='EXECUTE [dbo].[DatabaseBackup] 
 @Databases = ''SYSTEM_DATABASES'', 
 @Directory = NULL, 
-@BackupType - ''FULL'', 
+@BackupType = ''FULL'', 
 @Verify = ''N'', 
 @CleanupTime = 168, 
-@CleanupMode = ''BEFORE BACKUP'', 
+@CleanupMode = ''BEFORE_BACKUP'', 
 @CheckSum = ''N'', 
-@LogToTable ''Y'''
+@LogToTable = ''Y'''
 
 -------------------------------------------
 --Update User-Database full backups - keep for 7 days 
@@ -61,9 +61,9 @@ EXEC msdb.dbo.sp_update_jobstep
 @BackupType = ''FULL'', 
 @Verify = ''N'', 
 @CleanupTime = 168, 
-@CleanupMode = ''BEFORE BACKUP'', 
+@CleanupMode = ''BEFORE_BACKUP'', 
 @CheckSum = ''N'', 
-@LogToTable ''Y''' 
+@LogToTable = ''Y''' 
 
 -------------------------------------------
 --Update User-Database cliff backups - keep for 7 days 
@@ -97,7 +97,7 @@ EXEC msdb.dbo.sp_update_jobstep
 @BackupType = ''LOG'', 
 @Verify = ''N'', 
 @CleanupTime = 168, 
-@CleanupMode = ''BEFORE BACKUP'', 
+@CleanupMode = ''BEFORE_BACKUP'', 
 @CheckSum = ''N'', 
 @LogToTable = ''Y''' 
 
@@ -112,11 +112,11 @@ EXEC msdb.dbo.sp_update_jobstep
 @Databases = ''USER_DATABASES'', 
 @LogToTable = ''Y'', 
 @FragmentationLow = NULL, 
-@FragmentationMedium = ''INDEX_REORGANIZE,INDEX REBUILD ONLINE,INDEX_REBUILD_OFFLINE'', 
-@FragmentationHigh = ''INDEX_REBUILD_ONLINE,INDEX_REBUILD_OFFLINE'' 
-@FragmentationLevell = 5, 
+@FragmentationMedium = ''INDEX_REORGANIZE,INDEX_REBUILD_ONLINE,INDEX_REBUILD_OFFLINE'', 
+@FragmentationHigh = ''INDEX_REBUILD_ONLINE,INDEX_REBUILD_OFFLINE'', 
+@FragmentationLevel1 = 5, 
 @FragmentationLevel2 = 30, 
-@MinNumber0fPages = 500, 
+@MinNumberOfPages = 500, 
 @UpdateStatistics = ''ALL'', 
 @OnlyModifiedStatistics = ''Y''' 
 
