@@ -78,6 +78,7 @@
  - Moved validation procedures to external modules
  2021/08/13 - 1.3.0 - Added support of service accounts
  - fully tested sql config scripts
+ 2021/09/01 - 1.4.0 - Add support for availablity groups
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -125,15 +126,19 @@ param (
 
     [switch]$AddOSAdminToHostAdmin,
 
+    #params needed for clustering
     [switch]$IsInAvailablityGroup,
     [Parameter (Mandatory = $false)]
     [string]$ClusterName,
     [Parameter (Mandatory = $false)]
-    [string]$ClusterIP,
+    [System.Net.IPAddress]$ClusterIP,
     [Parameter (Mandatory = $false)]
     [string]$AGName,
     [Parameter (Mandatory = $false)]
-    [string]$SQLAGIPAddr,
+    [System.Net.IPAddress]$SQLAGIPAddr,
+    [Parameter (Mandatory = $false)]
+    [ValidateRange(1, [UInt16]::MaxValue)]
+    [UInt16]$SQLAGPort,
 
     [switch]$SkipSSMS,
 
@@ -146,7 +151,7 @@ param (
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
-$scriptVersion = '1.3.0' 
+$scriptVersion = '1.4.0' 
 $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
 
 ##########################################
@@ -772,12 +777,26 @@ Configuration ConfigureCluster
 
     Node $AllNodes.Where{ $_.NodeType -eq "Primary"}.NodeName
     {
+        if($Node.ClusterIP.length -eq 0 ){
+        # Cluster IP Address not specified - using DHCP
         xCluster createCluster
         {
             Name = $Node.ClusterName
             DomainAdministratorCredential = $InstallCredential 
             DependsOn = "[WindowsFeature]FailoverFeature"
         }
+    }
+    else
+    {
+        # Cluster IP Address specified - using ClusterIP
+        xCluster createCluster
+        {
+            Name = $Node.ClusterName
+            StaticIPAddress = $Node.ClusterIP
+            DomainAdministratorCredential = $InstallCredential 
+            DependsOn = "[WindowsFeature]FailoverFeature"
+        }   
+    }
     }
     Node $AllNodes.Where{ $_.NodeType -eq "Secondary"}.NodeName
     {
@@ -896,6 +915,7 @@ Configuration ConfigureAG
 
             PsDscRunAsCredential = $InstallCredential
         }
+        # Add permission of Service Account to each Endpoint
         SqlEndpointPermission 'SQLConfigureEndpointPermission'
         {
             Ensure               = 'Present'
@@ -924,38 +944,39 @@ Configuration ConfigureAG
 
                 PsDscRunAsCredential = $InstallCredential
             } 
-            #if ($node.AvailabilityGroupIP.length -gt 0)
-            #{
-            #    SQLAGListener AGListener
-            #    {
-            #        Ensure = 'Present'
-            #        ServerName      = $Node.NodeName
-            #        InstanceName    = $SqlInstance
-            #        AvailabilityGroup = $Node.AvailabilityGroupName
-            #        Name = $Node.AvailabilityGroupName
-            #        Port = 1433
-            #        IPAddress = $Node.AvailabilityGroupIP
-            #        DependsOn = '[SQLAG]AddAG'                
-#
-            #        PsDscRunAsCredential = $InstallCredential
-            #    }
-            #}
-            #else
-            #{
-            #    SQLAGListener AGListener
-            #    {
-            #        Ensure = 'Present'
-            #        ServerName      = $Node.NodeName
-            #        InstanceName    = $SqlInstance
-            #        AvailabilityGroup = $Node.AvailabilityGroupName
-            #        Name = $Node.AvailabilityGroupName
-            #        Port = 1433
-            #        DHCP = $True
-            #        DependsOn = '[SQLAG]AddAG'                
-#
-            #        PsDscRunAsCredential = $InstallCredential
-            #    }
-            #}
+            # handle if the server is configured with DHCP or static addresses
+            if ($node.AvailabilityGroupIP.length -gt 0)
+            {
+                SQLAGListener AGListener
+                {
+                    Ensure = 'Present'
+                    ServerName      = $Node.NodeName
+                    InstanceName    = $SqlInstance
+                    AvailabilityGroup = $Node.AvailabilityGroupName
+                    Name = $Node.AvailabilityGroupName
+                    Port = $Node.AvailabilityGroupPort
+                    IPAddress = $Node.AvailabilityGroupIP
+                    DependsOn = '[SQLAG]AddAG'                
+            
+                    PsDscRunAsCredential = $InstallCredential
+                }
+            }
+            else
+            {
+                SQLAGListener AGListener
+                {
+                    Ensure = 'Present'
+                    ServerName      = $Node.NodeName
+                    InstanceName    = $SqlInstance
+                    AvailabilityGroup = $Node.AvailabilityGroupName
+                    Name = $Node.AvailabilityGroupName
+                    Port = $Node.AvailabilityGroupPort
+                    DHCP = $True
+                    DependsOn = '[SQLAG]AddAG'                
+
+                    PsDscRunAsCredential = $InstallCredential
+                }
+            }
         }
         if ($Node.NodeType -eq 'Secondary')
         {
@@ -984,7 +1005,6 @@ Configuration ConfigureAG
             }
         }
     }
-
 }
 
 # Setup our configuration data object that will be used by our DSC configurations 
@@ -1003,6 +1023,7 @@ $config = @{
             ClusterIP                  = $ClusterIP
             AvailablityGroupName       = $AGName
             AvailabilityGroupIP        = $SQLAGIPAddr
+            AvailabilityGroupPort      = $SQLAGPort
         }
     )
 } 
