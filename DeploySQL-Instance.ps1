@@ -902,12 +902,12 @@ Configuration ConfigureAG
             Name                 = 'Hadr_endpoint'
             ServerName           = $Node.NodeName
             InstanceName         = $SqlInstance
-            Principal            = $SqlServiceCredential.UserName
+            Principal            = $SQLEngineServiceAccount.userName
             Permission           = 'CONNECT'
             DependsOn            = '[SQLEndpoint]HADREndpoint'
-
+        
             PsDscRunAsCredential = $SqlAdministratorCredential
-        }
+       }
         if ($Node.NodeType -eq 'Primary')
         {
             SQLAG AddAG
@@ -942,19 +942,19 @@ Configuration ConfigureAG
             #}
             #else
             #{
-                SQLAGListener AGListener
-                {
-                    Ensure = 'Present'
-                    ServerName      = $Node.NodeName
-                    InstanceName    = $SqlInstance
-                    AvailabilityGroup = $Node.AvailabilityGroupName
-                    Name = $Node.AvailabilityGroupName
-                    Port = 1433
-                    DHCP = $True
-                    DependsOn = '[SQLAG]AddAG'                
-
-                    PsDscRunAsCredential = $InstallCredential
-                }
+            #    SQLAGListener AGListener
+            #    {
+            #        Ensure = 'Present'
+            #        ServerName      = $Node.NodeName
+            #        InstanceName    = $SqlInstance
+            #        AvailabilityGroup = $Node.AvailabilityGroupName
+            #        Name = $Node.AvailabilityGroupName
+            #        Port = 1433
+            #        DHCP = $True
+            #        DependsOn = '[SQLAG]AddAG'                
+#
+            #        PsDscRunAsCredential = $InstallCredential
+            #    }
             #}
         }
         if ($Node.NodeType -eq 'Secondary')
@@ -1019,7 +1019,7 @@ foreach ($c in $s) {
     }
 }
 
-#$config.AllNodes | out-string | write-host
+$config.AllNodes | out-string | write-host
 
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
@@ -1051,8 +1051,8 @@ if ($IsInAvailablityGroup.IsPresent -eq $true)
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-    write-host "##### Starting sleep cycle @ " (get-date)
-    Start-Sleep -Seconds 300 
+    #write-host "##### Starting sleep cycle @ " (get-date)
+    #Start-Sleep -Seconds 300 
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
     Start-DscConfiguration -Path "$Dir\MOF\AG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
