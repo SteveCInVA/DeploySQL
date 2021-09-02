@@ -252,7 +252,7 @@ IF ($IsInAvailablityGroup.IsPresent -eq $true){
         Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGName is missing"
         $valid = $false
     }
-    IF ($SQLAGPort.length -eq 0){
+    IF ($SQLAGPort -eq 0){
         Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGPort is missing"
         $valid = $false
     }
@@ -267,7 +267,8 @@ if ($valid -eq $false) {
 
 ##########################################
 # ensure all psmodules exist in installing directory
-copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:ProgramFiles\WindowsPowerShell\Modules"
+#copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:HOMEDRIVE$Env:HOMEPATH\Documents\WindowsPowerShell\Modules" -Verbose
+copyFiles -SourcePath "$dir\PSModules" -DestPath "$env:ProgramFiles\WindowsPowerShell\Modules" -Verbose
 
 #define instance dependent variables
 IF ($Instance.Length -EQ 0) { 
@@ -532,7 +533,7 @@ Configuration InstallSQLEngine
         {
             GroupName        = "Administrators"
             Ensure           = "Present"
-            MembersToInclude = 'contoso\dba','contoso\stecarr-adm'
+            MembersToInclude = @($DBAOSAdminGroup)
             Credential       = $InstallCredential
         }
     }
