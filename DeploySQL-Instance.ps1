@@ -15,14 +15,14 @@
  - Ensure .NET 4.5 is installed 
  - Configure machine to Eastern Time Zone (GMT-4/5 depending on Daylight Savings) 
  - Copy installation media to C:\Software 
- - Install SQL Engine / Connectivy Tools / Backwards Compatability 
+ - Install SQL Engine / Connectivity Tools / Backwards Compatibility 
  - Installed provided SQL Service Packs / Cumulative Updates 
  - Configure Windows Firewall rule for SQL Server 
  - Configure Windows Firewall rule for SQL Browser 
  - Install current version of SQL Server Management Studio 
  - Disable Client Improvement Experience 
  - Ensure DBATeam is granted file system permissions to necessary SQL folders 
- - Configures Windows Cluster / Availablity Group
+ - Configures Windows Cluster / Availability Group
  - Execute SQL Server Post Installation Configuration Script .\SQLInstanceConfiguration.ps1 
   
  .INPUTS
@@ -37,41 +37,41 @@
  
  [-InstallSourcePath <string>] - Path to installation base. Should be a UNC Path such as \\server\SQLInstallation 
  
- [-SQLEngineServiceAccount <pscredential>] - Credential used to execute the SQL Server Service
+ [-SQLEngineServiceAccount <psCredential>] - Credential used to execute the SQL Server Service
 
- [-SQLAgentServiceAccount <pscredential>] - Credential used to execute the SQL Agent Service
+ [-SQLAgentServiceAccount <psCredential>] - Credential used to execute the SQL Agent Service
 
  [-DBAOSAdminGroup [string[]]] - Active directory group used for administration of SQL Server host machine. 
  
  [-DBASQLAdminGroup [string[]]] - Active directory group used for administration of SQL Server databases and service. 
  
- [-IsAzureVM] - Switch that if present will offset all drive letters by +1.  By default without this switch the assumption is that the first non-OS drive is D:\.  In Azure the first availble non-OS drive is E:\
+ [-IsAzureVM] - Switch that if present will offset all drive letters by +1.  By default without this switch the assumption is that the first non-OS drive is D:\.  In Azure the first available non-OS drive is E:\
 
  [-SkipDriveConfig] - Switch used to use to prevent initial drive configuration. Default is False. 
 
- [-SkipSQLInstall] - Switch is used to skip SQL Server installation (will not confiugre firewall, SSMS, PowerPlan, Timezone)
+ [-SkipSQLInstall] - Switch is used to skip SQL Server installation (will not configure firewall, SSMS, PowerPlan, Timezone)
 
  [-NoOpticalDrive] - Script assumes target(s) have an optical drive.  This switch will skip configuration if not present.
  
  [-AddOSAdminToHostAdmin] - switch that if included will add members of the DBAOSAdminGroup to local machine administrators
  
- [-IsInAvailabilityGroup] - Master switch that if enabled will create a Windows Cluster and a SQL Server Availablity Group.
- [-ClusterName [string]] - Required if -IsInAvailablityGroup is specified.  Name of the Windows Cluster
+ [-IsInAvailabilityGroup] - Master switch that if enabled will create a Windows Cluster and a SQL Server Availability Group.
+ [-ClusterName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of the Windows Cluster
  [-ClusterIP [System.Net.IPAddress]] - optional. if present will configure the cluster with a static IP address.  Otherwise uses DHCP.
- [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availablity Group
- [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availablity group with a static IP address.  Otherwise uses DHCP.
- [-SQLAGPort [UInt16]] - required if -IsInAvailablityGroup is specified.  Port for Availablity Group Listener
+ [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availability Group
+ [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availability group with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGPort [UInt16]] - required if -IsInAvailabilityGroup is specified.  Port for Availability Group Listener
 
  [-SkipSSMS] - switch that if included will skip the installation of SSMS
  
  [-SkipPostDeployment] - switch that if included will not run SQL Server post installation scripts
  
- -InstallCredential <pscredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
+ -InstallCredential <psCredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server. 
  
  .EXAMPLE 
  
- .\DeploySQL-Instance.ps1 -Computer computerl -Instance Inst. 1 -SQLVersion SQL2017 -NumberOfNonOSDrives 5 -InstallSourcePath '\\computerShare\SQLInstall' -DBAOSAdminGroup domain\DBATeamMembers -DBASQLAdminGroup domain\DBATeamMembers -SkipDriveConfig False 
- Would install SQL 2017 to Computerl requiring 5 non-OS drives for installation. 
+ .\DeploySQL-Instance.ps1 -Computer computer1 -Instance Inst. 1 -SQLVersion SQL2017 -NumberOfNonOSDrives 5 -InstallSourcePath '\\computerShare\SQLInstall' -DBAOSAdminGroup domain\DBATeamMembers -DBASQLAdminGroup domain\DBATeamMembers -SkipDriveConfig False 
+ Would install SQL 2017 to Computer1 requiring 5 non-OS drives for installation. 
  
  .\DeploySQL-Instance.ps1 -Computer computer2 -NumberOfNonOSDrives 1 -InstallSourcePaLh '\\computerShare\SQLInstall' -SkipDriveConfig True 
  Would install SQL 2019 to Computer2 using only the D: for all files. Would not try to change any disk configurations during install. 
@@ -89,12 +89,12 @@
  2021/08/12 - 1.2.0 - Enabled support for multiple computers, DBAOSAdminGroup, DBASQLAdminGroup as parameters.
  - Added support for Azure by offsetting disk configuration by 1... so most environments Disk1 is the D drive, in Azure there is a D:\Temporary Storage drive that requires the offset.
  - Added support to handle if there is no optical drive present
- - Added support to ensure the required powershell modules were installed on the installing worksatation
+ - Added support to ensure the required powershell modules were installed on the installing workstation
  - Added in several parameter validations
  - Moved validation procedures to external modules
  2021/08/13 - 1.3.0 - Added support of service accounts
  - fully tested sql config scripts
- 2021/09/01 - 1.4.0 - Add support for availablity groups
+ 2021/09/01 - 1.4.0 - Add support for availability groups
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -127,7 +127,7 @@ param (
     [System.Management.Automation.PSCredential]$SQLAgentServiceAccount, 
 
     [Parameter (Mandatory = $false)] 
-    [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\groupl", 
+    [string[]]$DBAOSAdminGroup = "$env:USERDOMAIN\group1", 
 
     [Parameter (Mandatory = $false)] 
     [string[]]$DBASQLAdminGroup = "$env:USERDOMAIN\group2", 
@@ -143,7 +143,7 @@ param (
     [switch]$AddOSAdminToHostAdmin,
 
     #params needed for clustering
-    [switch]$IsInAvailablityGroup,
+    [switch]$IsInAvailabilityGroup,
     [Parameter (Mandatory = $false)]
     [string]$ClusterName,
     [Parameter (Mandatory = $false)]
@@ -174,8 +174,8 @@ $InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K"
 #begin validation of parameters
 
 #Set working directory 
-[string]$Scriptpath = $MyInvocation.MyCommand.Path 
-[string]$Dir = Split-Path $Scriptpath
+[string]$scriptPath = $MyInvocation.MyCommand.Path 
+[string]$Dir = Split-Path $scriptPath
 
 Import-Module $dir\helperFunctions\AccountVerifications.psm1
 Import-Module $dir\helperFunctions\DirectoryVerifications.psm1
@@ -242,8 +242,8 @@ IF (!(Test-Path $InstallSourcePath)) {
     $valid = $false
 } 
 
-# test if isInAvailablityGroup is specified, that the cluster name and ag name is specified
-IF ($IsInAvailablityGroup.IsPresent -eq $true){
+# test if isInAvailabilityGroup is specified, that the cluster name and ag name is specified
+IF ($IsInAvailabilityGroup.IsPresent -eq $true){
     IF ($clusterName.length -eq 0){
         Write-Warning "IsInAvailabilityGroup parameter is specified but ClusterName is missing"
         $valid = $false
@@ -266,7 +266,7 @@ if ($valid -eq $false) {
 }
 
 ##########################################
-# ensure all psmodules exist in installing directory
+# ensure all powershell modules exist in installing directory
 #copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:HOMEDRIVE$Env:HOMEPATH\Documents\WindowsPowerShell\Modules" -Verbose
 copyFiles -SourcePath "$dir\PSModules" -DestPath "$env:ProgramFiles\WindowsPowerShell\Modules" -Verbose
 
@@ -955,7 +955,7 @@ Configuration ConfigureAG
             SQLAG AddAG
             {
                 Ensure          = 'Present'
-                Name            = $Node.AvailablityGroupName
+                Name            = $Node.AvailabilityGroupName
                 ServerName      = $Node.NodeName
                 InstanceName    = $SqlInstance
                 AvailabilityMode = 'SynchronousCommit'
@@ -1014,7 +1014,7 @@ Configuration ConfigureAG
             {
                 Ensure                  ='Present'
                 Name                    = $Node.NodeName
-                AvailabilityGroupName   = $Node.AvailablityGroupName
+                AvailabilityGroupName   = $Node.AvailabilityGroupName
                 ServerName              = $Node.NodeName
                 InstanceName            = $SqlInstance
                 AvailabilityMode        = 'SynchronousCommit'
@@ -1043,7 +1043,7 @@ $config = @{
 
             ClusterName                = $ClusterName
             ClusterIP                  = $ClusterIP
-            AvailablityGroupName       = $SQLAGName
+            AvailabilityGroupName      = $SQLAGName
             AvailabilityGroupIP        = $SQLAGIPAddr
             AvailabilityGroupPort      = $SQLAGPort
         }
@@ -1087,8 +1087,8 @@ if ($SkipSQLInstall.isPresent -eq $false) {
     Start-DscConfiguration -Path "$Dir\MOF\SQLConfig" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 }
 
-#Configure IsInAvailablityGroup
-if ($IsInAvailablityGroup.IsPresent -eq $true)
+#Configure IsInAvailabilityGroup
+if ($IsInAvailabilityGroup.IsPresent -eq $true)
 {
     ConfigureCluster -ConfigurationData $config -OutputPath "$Dir\MOF\Cluster" 
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
