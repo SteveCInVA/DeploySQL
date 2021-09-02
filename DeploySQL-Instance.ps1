@@ -61,6 +61,7 @@
  [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availability Group
  [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availability group with a static IP address.  Otherwise uses DHCP.
  [-SQLAGPort [UInt16]] - required if -IsInAvailabilityGroup is specified.  Port for Availability Group Listener
+ [-SkipSQLAGListenerCreation] - optional.  If present will skip configuration of the SQL Listener for the availability group
 
  [-SkipSSMS] - switch that if included will skip the installation of SSMS
  
@@ -95,6 +96,7 @@
  2021/08/13 - 1.3.0 - Added support of service accounts
  - fully tested sql config scripts
  2021/09/01 - 1.4.0 - Add support for availability groups
+ 2021/09/02 - 1.4.1 - Added support to skip availability group listener creation
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -155,6 +157,7 @@ param (
     [Parameter (Mandatory = $false)]
     [ValidateRange(1, [UInt16]::MaxValue)]
     [UInt16]$SQLAGPort,
+    [switch]$SkipSQLAGListenerCreation,
 
     [switch]$SkipSSMS,
 
@@ -964,39 +967,43 @@ Configuration ConfigureAG
 
                 PsDscRunAsCredential = $InstallCredential
             } 
-            # handle if the server is configured with DHCP or static addresses
-            if ($node.AvailabilityGroupIP.length -gt 0)
+            if ($node.SkipSQLAGListenerCreation -eq $false)
             {
-                SQLAGListener AGListener
+                # handle if the server is configured with DHCP or static addresses
+                if ($node.AvailabilityGroupIP.length -gt 0)
                 {
-                    Ensure = 'Present'
-                    ServerName      = $Node.NodeName
-                    InstanceName    = $SqlInstance
-                    AvailabilityGroup = $Node.AvailabilityGroupName
-                    Name = $Node.AvailabilityGroupName
-                    Port = $Node.AvailabilityGroupPort
-                    IPAddress = $Node.AvailabilityGroupIP
-                    DependsOn = '[SQLAG]AddAG'                
-            
-                    PsDscRunAsCredential = $InstallCredential
+                    SQLAGListener AGListener
+                    {
+                        Ensure = 'Present'
+                        ServerName      = $Node.NodeName
+                        InstanceName    = $SqlInstance
+                        AvailabilityGroup = $Node.AvailabilityGroupName
+                        Name = $Node.AvailabilityGroupName
+                        Port = $Node.AvailabilityGroupPort
+                        IPAddress = $Node.AvailabilityGroupIP
+                        DependsOn = '[SQLAG]AddAG'                
+                
+                        PsDscRunAsCredential = $InstallCredential
+                    }
                 }
-            }
-            else
-            {
-                SQLAGListener AGListener
+                else
                 {
-                    Ensure = 'Present'
-                    ServerName      = $Node.NodeName
-                    InstanceName    = $SqlInstance
-                    AvailabilityGroup = $Node.AvailabilityGroupName
-                    Name = $Node.AvailabilityGroupName
-                    Port = $Node.AvailabilityGroupPort
-                    DHCP = $True
-                    DependsOn = '[SQLAG]AddAG'                
+                    SQLAGListener AGListener
+                    {
+                        Ensure = 'Present'
+                        ServerName      = $Node.NodeName
+                        InstanceName    = $SqlInstance
+                        AvailabilityGroup = $Node.AvailabilityGroupName
+                        Name = $Node.AvailabilityGroupName
+                        Port = $Node.AvailabilityGroupPort
+                        DHCP = $True
+                        DependsOn = '[SQLAG]AddAG'                
 
-                    PsDscRunAsCredential = $InstallCredential
+                        PsDscRunAsCredential = $InstallCredential
+                    }
                 }
             }
+
         }
         if ($Node.NodeType -eq 'Secondary')
         {
@@ -1044,6 +1051,7 @@ $config = @{
             AvailabilityGroupName      = $SQLAGName
             AvailabilityGroupIP        = $SQLAGIPAddr
             AvailabilityGroupPort      = $SQLAGPort
+            SkipSQLAGListenerCreation  = $SkipSQLAGListenerCreation.IsPresent
         }
     )
 } 
