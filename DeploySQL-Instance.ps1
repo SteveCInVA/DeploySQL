@@ -158,8 +158,6 @@ param (
 
     [switch]$SkipSSMS,
 
-    [Switch]$SkipReboot,
-
     [Switch]$SkipPostDeployment,
 
     [Parameter (Mandatory = $false)] 
