@@ -59,6 +59,7 @@
  [-ClusterName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of the Windows Cluster
  [-ClusterIP [System.Net.IPAddress]] - optional. if present will configure the cluster with a static IP address.  Otherwise uses DHCP.
  [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availability Group
+ [-SQLHADREndpointPort[UInt16]] - required if -IsInAvailabilityGroup is specified.  Port used for HADR_Endpoint
  [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availability group with a static IP address.  Otherwise uses DHCP.
  [-SQLAGPort [UInt16]] - required if -IsInAvailabilityGroup is specified.  Port for Availability Group Listener
  [-SkipSQLAGListenerCreation] - optional.  If present will skip configuration of the SQL Listener for the availability group
@@ -97,6 +98,7 @@
  - fully tested sql config scripts
  2021/09/01 - 1.4.0 - Add support for availability groups
  2021/09/02 - 1.4.1 - Added support to skip availability group listener creation
+ 2021/09/03 - 1.4.2 - Fixed issue with overlapping ports with HADR_Endpoints
  
  This script makes some directory assumptions: 
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed. 
@@ -153,6 +155,9 @@ param (
     [Parameter (Mandatory = $false)]
     [string]$SQLAGName,
     [Parameter (Mandatory = $false)]
+    [ValidateRange(1, [UInt16]::MaxValue)]
+    [UInt16]$SQLHADREndpointPort,
+    [Parameter (Mandatory = $false)]
     [System.Net.IPAddress]$SQLAGIPAddr,
     [Parameter (Mandatory = $false)]
     [ValidateRange(1, [UInt16]::MaxValue)]
@@ -168,7 +173,7 @@ param (
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN) 
 ) 
 
-$scriptVersion = '1.4.0' 
+$scriptVersion = '1.4.2' 
 $InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K" 
 
 ##########################################
@@ -257,7 +262,10 @@ IF ($IsInAvailabilityGroup.IsPresent -eq $true) {
         Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGPort is missing"
         $valid = $false
     }
-    
+    IF ($SQLHADREndpointPort -eq 0) {
+        Write-Warning "IsInAvailabilityGroup parameter is specified byt SQLHADREndpointPort is missing"
+        $valid = $false
+    }
 }
 
 ##########################################
@@ -912,7 +920,7 @@ Configuration ConfigureAG
             EndPointName         = 'Hadr_endpoint'
             EndpointType         = 'DatabaseMirroring'
             Ensure               = 'Present'
-            Port                 = 5022
+            Port                 = $Node.HADREndpointPort
             ServerName           = $Node.NodeName
             InstanceName         = $SQLInstance
 
@@ -1018,6 +1026,7 @@ $config = @{
             ClusterName                 = $ClusterName
             ClusterIP                   = $ClusterIP
             AvailabilityGroupName       = $SQLAGName
+            HADREndpointPort            = $SQLHADREndpointPort
             AvailabilityGroupIP         = $SQLAGIPAddr
             AvailabilityGroupPort       = $SQLAGPort
             SkipSQLAGListenerCreation   = $SkipSQLAGListenerCreation.IsPresent
@@ -1075,8 +1084,8 @@ if ($IsInAvailabilityGroup.IsPresent -eq $true) {
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-    Write-Host "##### Starting sleep cycle @ " (Get-Date)
-    Start-Sleep -Seconds 300 
+#    Write-Host "##### Starting sleep cycle @ " (Get-Date)
+#    Start-Sleep -Seconds 300 
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
     Start-DscConfiguration -Path "$Dir\MOF\AG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
