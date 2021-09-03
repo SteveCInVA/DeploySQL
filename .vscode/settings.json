@@ -5,9 +5,12 @@
         "COMPUTERNAME",
         "DBAOS",
         "DBASQL",
+        "dbatools",
         "HADR",
         "HKEY",
+        "MAXDOP",
         "Mgmt",
+        "msdb",
         "MSSQL",
         "MSSQLSERVER",
         "norestart",
@@ -19,6 +22,11 @@
         "SQLENGINE",
         "SQLTELEMETRY",
         "SSMS",
-        "subfolders"
-    ]
+        "subfolders",
+        "tempdb"
+    ],
+    "powershell.codeFormatting.autoCorrectAliases": true,
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
+    "powershell.codeFormatting.whitespaceBetweenParameters": true
 }

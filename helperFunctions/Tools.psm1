@@ -8,14 +8,12 @@ function CopyFiles {
         [string]$DestPath
     )
 
-    write-verbose "Copy files from $SourcePath to $DestPath..."
-    try{
+    Write-Verbose "Copy files from $SourcePath to $DestPath..."
+    try {
         xcopy "$SourcePath" "$DestPath" /s /e /d /f /y > $null
+        Write-Verbose "Copy files completed."
     }
-    catch
-    {
-        Write-warning $_.Exception.Message
+    catch {
+        Write-Warning $_.Exception.Message
     }
-    Write-Verbose "Copy files completed."
-
 }

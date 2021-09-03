@@ -1,41 +1,39 @@
-function Test-AccountExists
-{
+function Test-AccountExists {
     [CmdletBinding()]
     Param(
-        [Parameter (Mandatory=$True)]
+        [Parameter (Mandatory = $True)]
         [string]$AccountName,
 
-        [Parameter (Mandatory=$False)]
-        [string]$ADDomain=$env:USERDOMAIN
+        [Parameter (Mandatory = $False)]
+        [string]$ADDomain = $env:USERDOMAIN
     )
     Write-Verbose "Testing $AccountName"
 
     $domain = $ADDomain.ToUpper()
-    $filter = $AccountName.ToUpper().Replace("$domain\","")
+    $filter = $AccountName.ToUpper().Replace("$domain\", "")
     $filter = "SAMAccountName=$filter"
     
-    try{
+    try {
         $r = Get-ADObject -LDAPFilter $filter
-        if ($null -eq $r){
+        if ($null -eq $r) {
             Write-Verbose "$AccountName not found in Active Directory"
             return $false
         }
         else {
-            write-verbose "$AccountName found in Active Directory"
+            Write-Verbose "$AccountName found in Active Directory"
             return $true
         }
     }
-    catch{
-        Write-warning $_.Exception.Message
+    catch {
+        Write-Warning $_.Exception.Message
         return $False
     }
 }
 
-function Test-AccountCredential
-{
+function Test-AccountCredential {
     [CmdletBinding()]
     Param(
-        [Parameter (Mandatory=$True)]
+        [Parameter (Mandatory = $True)]
         [System.Management.Automation.PSCredential]$Credential
     )
 

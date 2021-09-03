@@ -46,8 +46,8 @@ Configuration LCMConfig
         LocalConfigurationManager { 
             ActionAfterReboot  = 'ContinueConfiguration' 
             ConfigurationMode  = 'ApplyOnly'
-            DebugMode = 'ForceModuleImport'
-            RefreshMode = 'Push' 
+            DebugMode          = 'ForceModuleImport'
+            RefreshMode        = 'Push' 
             RebootNodeIfNeeded = $true
         } 
     } 
@@ -64,59 +64,51 @@ Configuration ConfigureCluster
     #base feature install
     Node $AllNodes.NodeName
     {
-        WindowsFeature FailoverFeature
-        {
+        WindowsFeature FailoverFeature {
             Ensure = "Present"
-            Name = "Failover-Clustering"
+            Name   = "Failover-Clustering"
         }
-        PendingReboot AfterClusterFeature
-        {
-            Name = "AfterClusterFeature"
+        PendingReboot AfterClusterFeature {
+            Name      = "AfterClusterFeature"
             DependsOn = "[WindowsFeature]FailoverFeature"
         }
-        WindowsFeature RSATClusteringMgmt
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-Mgmt"
+        WindowsFeature RSATClusteringMgmt {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-Mgmt"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
-        WindowsFeature RSATClusteringPowerShell
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-PowerShell"
+        WindowsFeature RSATClusteringPowerShell {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-PowerShell"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
-        WindowsFeature RSATClusteringCmdInterface
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-CmdInterface"
+        WindowsFeature RSATClusteringCmdInterface {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-CmdInterface"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
     }
 
-    Node $AllNodes.Where{ $_.NodeType -eq "Primary"}.NodeName
+    Node $AllNodes.Where{ $_.NodeType -eq "Primary" }.NodeName
     {
-        xCluster createCluster
-        {
-            Name = $Node.ClusterName
+        xCluster createCluster {
+            Name                          = $Node.ClusterName
             DomainAdministratorCredential = $InstallCredential 
-            DependsOn = "[WindowsFeature]FailoverFeature"
+            DependsOn                     = "[WindowsFeature]FailoverFeature"
         }
     }
-    Node $AllNodes.Where{ $_.NodeType -eq "Secondary"}.NodeName
+    Node $AllNodes.Where{ $_.NodeType -eq "Secondary" }.NodeName
     {
-        xWaitForCluster waitForCluster
-        {
-            Name = $Node.ClusterName
+        xWaitForCluster waitForCluster {
+            Name             = $Node.ClusterName
             RetryIntervalSec = 10
-            RetryCount = 60
-            DependsOn = "[WindowsFeature]FailoverFeature"
+            RetryCount       = 60
+            DependsOn        = "[WindowsFeature]FailoverFeature"
         }
-        xCluster joinCluster
-        {
-            Name = $Node.ClusterName
+        xCluster joinCluster {
+            Name                          = $Node.ClusterName
             DomainAdministratorCredential = $InstallCredential 
-            DependsOn = "[xWaitForCluster]waitForCluster"
+            DependsOn                     = "[xWaitForCluster]waitForCluster"
         }
     }
 }
@@ -137,21 +129,21 @@ $config = @{
             PSDscAllowPlainTextPassword = $true 
             PsDscAllowDomainUser        = $true 
 
-            ClusterName                = $ClusterName
+            ClusterName                 = $ClusterName
         }
     )
 } 
 # configuration specific to primary node
 $config.AllNodes += @{
-    NodeName                    = $p
-    NodeType                    = 'Primary'
+    NodeName = $p
+    NodeType = 'Primary'
 }
 # configuration specific to all other nodes
 foreach ($c in $s) {
     $config.AllNodes += @{
-        NodeName                    = $c 
-        NodeType                    = 'Secondary'
-   }
+        NodeName = $c 
+        NodeType = 'Secondary'
+    }
 }
 
 ###################################################################

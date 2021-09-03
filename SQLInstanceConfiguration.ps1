@@ -26,12 +26,12 @@ Import-Module -Name dbatools
  
 Write-Verbose "Starting SQL Instance Configuration"
 
-#Set Traceflaq 3625 (prevent showing information for failed logins) 
+#Set Traceflag 3625 (prevent showing information for failed logins) 
 Write-Verbose "Testing for Trace Flag 3625"
 $startupFlags = Get-DbaStartupParameter -SqlInstance $SqlSvrInstance
-if ($startupFlags.TraceFlags.contains(3625) -eq $false){
-Set-DbaStartupParameter -SQLInstance $SqlSvrInstance -TraceFlag 3625 -TraceFlagOverride -Confirm:$false -Force 
-    Write-Verbose "Added TraceFlag 3625 to $SqlSvrInstance"
+if ($startupFlags.TraceFlags.contains(3625) -eq $false) {
+   Set-DbaStartupParameter -SqlInstance $SqlSvrInstance -TraceFlag 3625 -TraceFlagOverride -Confirm:$false -Force 
+   Write-Verbose "Added TraceFlag 3625 to $SqlSvrInstance"
 }
  
 #Rename the SA Account 
@@ -40,15 +40,15 @@ Rename-DbaLogin -SqlInstance $SqlSvrInstance -Login sa -NewLogin xAdmin
  
 #ensure renamed SA account is disabled 
 Write-Verbose "Disable the SA Account"
-Set-DbaLogin -SQLInstance $SqlSvrInstance -Login xAdmin -Disable 
+Set-DbaLogin -SqlInstance $SqlSvrInstance -Login xAdmin -Disable 
  
 #Set MAXDOP based on recommended value 
 Write-Verbose "Configure MaxDOP to recommended settings"
-Set-DbaMaxDOP -SQLInstance $SqlSvrInstance 
+Set-DbaMaxDop -SqlInstance $SqlSvrInstance 
  
 #Set MaxMemory based on recommended value 
 Write-Verbose "Configure MaxMemory to recommended settings"
-Set-DbaMaxMemory -SQLInstance $SqlSvrInstance 
+Set-DbaMaxMemory -SqlInstance $SqlSvrInstance 
  
 #Enable DAC 
 Write-Verbose "Enable Remote Dedicated Admin Connection"
@@ -64,13 +64,13 @@ Set-DbaSpConfigure -SqlInstance $SqlSvrInstance -ConfigName OptimizeAdhocWorkloa
  
 #Set maximum number of error logs 
 Write-Verbose "Set maximum number of ErrorLogs to keep to 99"
-Set-DbaErrorLogConfig -SQLInstance $SqlSvrInstance -LogCount 99
+Set-DbaErrorLogConfig -SqlInstance $SqlSvrInstance -LogCount 99
  
 #temp db configurations 
 Write-Verbose "Configure tempdb per recommended settings"
 #$cSession = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
 #$totalFiles = (Get-CimInstance -CimSession $cSession -ClassName Win32_ComputerSystem).Number0fLogicalProcessors 
-$totalFiles = (Get-DbaCmObject -Computername $Computer -ClassName Win32_ComputerSystem -Credential $InstallCredential).NumberOfLogicalProcessors
+$totalFiles = (Get-DbaCmObject -ComputerName $Computer -ClassName Win32_ComputerSystem -Credential $InstallCredential).NumberOfLogicalProcessors
 if ($totalFiles -ge 8) { $totalFiles = 8 }
 $fileSize = (512 * $totalFiles) 
 Set-DbaTempDbConfig -SqlInstance $SqlSvrInstance -DataFileSize $fileSize -DataFileCount $totalFiles 
@@ -96,7 +96,7 @@ Invoke-DbaQuery -SqlInstance $SqlSvrInstance -Database master -File "$InstallSou
  
 #agent history configuration 
 Write-Verbose "Configure DBA Agent history retention"
-Set-DbaAgentServer -SQLInstance $SqlSvrInstance -MaximumHistoryRows 10000 -MaximumJobHistoryRows 1000 
+Set-DbaAgentServer -SqlInstance $SqlSvrInstance -MaximumHistoryRows 10000 -MaximumJobHistoryRows 1000 
  
 #Grant additional space to Master DB 
 Write-Verbose "Grant additional space to Master & MSDB databases"

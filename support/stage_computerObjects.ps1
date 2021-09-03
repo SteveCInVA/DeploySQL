@@ -9,7 +9,7 @@ Param(
     [Parameter (Mandatory = $false)] 
     [string]$ObjectPath = "OU=SQL,OU=Servers,DC=Contoso,DC=COM",
 
-    [Parameter (Mandatory=$false)]
+    [Parameter (Mandatory = $false)]
     [ValidateSet('create', 'delete')] 
     [string]$Action = 'create', 
 
@@ -17,83 +17,67 @@ Param(
     [switch]$doNotDeleteComputerAccounts
 )
 
-if ($Action -eq 'create')
-{
+if ($Action -eq 'create') {
     #Create computer objects
-    foreach ($c in $Computer)
-    {
-    #create base computers
-        try
-        {
+    foreach ($c in $Computer) {
+        #create base computers
+        try {
             New-ADComputer -Name $c -SamAccountName $c -Path $ObjectPath -Enabled $true
             Write-Verbose "Created computer account $c in $ObjectPath"
         }
-        catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException]
-        {
+        catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
             Write-Warning "Computer object $c was already found... skipping"     
         }
-        catch
-        {
+        catch {
             Write-Error -Exception $_.Exception -Message "Error creating disabled computer object"
         }
     } 
     
     #create cluster object disabled
-    try
-    {
+    try {
         New-ADComputer -Name $ClusterName -SamAccountName $ClusterName -Path $ObjectPath -Enabled $false
         Write-Verbose "Created disabled cluster account $ClusterName in $ObjectPath"
     }
-    catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException]
-    {
+    catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
         Write-Warning "Cluster Object $ClusterName was already found... skipping"  
     }
-    catch
-    {
+    catch {
         Write-Error -Exception $_.Exception -Message "Error creating disabled cluster object"
     }
 
     #Grant Access to cluster object
-    try 
-    {
-        $acl = get-acl "ad:CN=$ClusterName,$ObjectPath"
+    try {
+        $acl = Get-Acl "ad:CN=$ClusterName,$ObjectPath"
         $adRights = [System.DirectoryServices.ActiveDirectoryRights] "GenericAll"
         $type = [System.Security.AccessControl.AccessControlType] "Allow"
         $inheritanceType = [System.DirectoryServices.ActiveDirectorySecurityInheritance] "All"
     
-        foreach ($c in $Computer)
-        {
-            $adc = get-adcomputer $c
+        foreach ($c in $Computer) {
+            $adc = Get-ADComputer $c
             $sid = [System.Security.Principal.SecurityIdentifier] $adc.SID
             $identity = [System.Security.Principal.IdentityReference] $SID
-            $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule $identity,$adRights,$type,$inheritanceType
+            $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule $identity, $adRights, $type, $inheritanceType
             # Add the ACE to the ACL, then set the ACL to save the changes
             $acl.AddAccessRule($ace)
-            Set-acl -aclobject $acl "ad:CN=$ClusterName,$ObjectPath"
+            Set-Acl -AclObject $acl "ad:CN=$ClusterName,$ObjectPath"
             Write-Verbose "Granted 'Full Control' to $c on Cluster object $ClusterName"
         }
     }
-    catch
-    {
+    catch {
         Write-Error -Exception $_.Exception -Message "Error granting access to cluster object"
     }
 
     #disable computer accounts
-    if(!($doNotDisableComputerAccounts.isPresent))
-    {
-        foreach ($c in $Computer)
-        {
-            try
-            {
+    if (!($doNotDisableComputerAccounts.isPresent)) {
+        foreach ($c in $Computer) {
+            try {
                 Set-ADComputer -Identity $c -Enabled $false
                 Write-Verbose "Disabled computer account $c in $ObjectPath"
             }
-            catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException]
-            {
+            catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
                 Write-Warning "Computer object $c was already found... skipping"     
             }
-            catch
-            {
+            catch {
                 Write-Error -Exception $_.Exception -Message "Error disabling computer object"
             }
         } 
@@ -101,41 +85,32 @@ if ($Action -eq 'create')
     Write-Output "Created Active Directory objects"
 }
 
-if ($action -eq 'delete')
-{
+if ($action -eq 'delete') {
     #delete computers
-    if(!($doNotDeleteComputerAccounts.isPresent))
-    {
-        foreach ($c in $Computer)
-        {
-            try 
-            {
+    if (!($doNotDeleteComputerAccounts.isPresent)) {
+        foreach ($c in $Computer) {
+            try {
                 Remove-ADObject -Identity "CN=$c,$ObjectPath" -Confirm:$False -Recursive
-                write-Verbose "Deleted $c computer object"
+                Write-Verbose "Deleted $c computer object"
             }
-            catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]
-            {
+            catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                 Write-Warning "Computer $c was not found"
             }
-            catch
-            {
+            catch {
                 Write-Error -Exception $_.Exception -Message "Error deleting computer objects"
             }
         }
     }
     #delete cluster name
-        try 
-        {
-            Remove-ADObject -Identity "CN=$ClusterName,$ObjectPath" -Confirm:$False -Recursive
-            write-Verbose "Deleted $ClusterName computer object"
-        }
-        catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]
-        {
-            Write-Warning "Cluster Object $ClusterName was not found"
-        }
-        catch
-        {
-            Write-Error -Exception $_.Exception -Message "Error deleting cluster object"
-        }
+    try {
+        Remove-ADObject -Identity "CN=$ClusterName,$ObjectPath" -Confirm:$False -Recursive
+        Write-Verbose "Deleted $ClusterName computer object"
+    }
+    catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
+        Write-Warning "Cluster Object $ClusterName was not found"
+    }
+    catch {
+        Write-Error -Exception $_.Exception -Message "Error deleting cluster object"
+    }
     Write-Output "Deleted Active Directory objects"
 }

@@ -169,7 +169,7 @@ param (
 ) 
 
 $scriptVersion = '1.4.0' 
-$InstallDate = get-date -format "yyyy-mm-dd HH:mm:ss K" 
+$InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K" 
 
 ##########################################
 #begin validation of parameters
@@ -184,14 +184,14 @@ Import-Module $dir\helperFunctions\Tools.psm1
 
 #check if basic directory structure is present
 if ((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false) {
-    write-warning "Key installation directories missing."
+    Write-Warning "Key installation directories missing."
     $valid = $false
 }
 
 #check DBA OS Admin Group exists 
 foreach ($acct in $DBAOSAdminGroup) {
     if ((Test-AccountExists -AccountName $acct) -eq $False) {
-        write-warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
+        Write-Warning "Unable to find $acct in Active Directory for the DBAOSAdminGroup parameter" 
         $valid = $false
     }
 }
@@ -199,7 +199,7 @@ foreach ($acct in $DBAOSAdminGroup) {
 #check DBA SQL Admin Group exists 
 foreach ($acct in $DBASQLAdminGroup) {
     if ((Test-AccountExists -AccountName $acct) -eq $False) {
-        write-warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
+        Write-Warning "Unable to find $acct in Active Directory for the DBASQLAdminGroup parameter" 
         $valid = $false
     }
 }
@@ -244,16 +244,16 @@ IF (!(Test-Path $InstallSourcePath)) {
 } 
 
 # test if isInAvailabilityGroup is specified, that the cluster name and ag name is specified
-IF ($IsInAvailabilityGroup.IsPresent -eq $true){
-    IF ($clusterName.length -eq 0){
+IF ($IsInAvailabilityGroup.IsPresent -eq $true) {
+    IF ($clusterName.length -eq 0) {
         Write-Warning "IsInAvailabilityGroup parameter is specified but ClusterName is missing"
         $valid = $false
     }
-    IF ($SQLAGName.length -eq 0){
+    IF ($SQLAGName.length -eq 0) {
         Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGName is missing"
         $valid = $false
     }
-    IF ($SQLAGPort -eq 0){
+    IF ($SQLAGPort -eq 0) {
         Write-Warning "IsInAvailabilityGroup parameter is specified but SQLAGPort is missing"
         $valid = $false
     }
@@ -530,8 +530,7 @@ Configuration InstallSQLEngine
 
     Node $AllNodes.Where{ $_.AddOSAdminToHostAdmin -eq $true }.NodeName
     {
-        Group AdministratorsGroup
-        {
+        Group AdministratorsGroup {
             GroupName        = "Administrators"
             Ensure           = "Present"
             MembersToInclude = @($DBAOSAdminGroup)
@@ -768,73 +767,63 @@ Configuration ConfigureCluster
     #base feature install
     Node $AllNodes.NodeName
     {
-        WindowsFeature FailoverFeature
-        {
+        WindowsFeature FailoverFeature {
             Ensure = "Present"
-            Name = "Failover-Clustering"
+            Name   = "Failover-Clustering"
         }
-        PendingReboot AfterClusterFeature
-        {
-            Name = "AfterClusterFeature"
+        PendingReboot AfterClusterFeature {
+            Name      = "AfterClusterFeature"
             DependsOn = "[WindowsFeature]FailoverFeature"
         }
-        WindowsFeature RSATClusteringMgmt
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-Mgmt"
+        WindowsFeature RSATClusteringMgmt {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-Mgmt"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
-        WindowsFeature RSATClusteringPowerShell
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-PowerShell"
+        WindowsFeature RSATClusteringPowerShell {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-PowerShell"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
-        WindowsFeature RSATClusteringCmdInterface
-        {
-            Ensure = "Present"
-            Name = "RSAT-Clustering-CmdInterface"
+        WindowsFeature RSATClusteringCmdInterface {
+            Ensure    = "Present"
+            Name      = "RSAT-Clustering-CmdInterface"
             DependsOn = "[WindowsFeature]FailoverFeature", "[PendingReboot]AfterClusterFeature"
         }
     }
 
-    Node $AllNodes.Where{ $_.NodeType -eq "Primary"}.NodeName
+    Node $AllNodes.Where{ $_.NodeType -eq "Primary" }.NodeName
     {
-        if($Node.ClusterIP.length -eq 0 ){
-        # Cluster IP Address not specified - using DHCP
-        xCluster createCluster
-        {
-            Name = $Node.ClusterName
-            DomainAdministratorCredential = $InstallCredential 
-            DependsOn = "[WindowsFeature]FailoverFeature"
+        if ($Node.ClusterIP.length -eq 0 ) {
+            # Cluster IP Address not specified - using DHCP
+            xCluster createCluster {
+                Name                          = $Node.ClusterName
+                DomainAdministratorCredential = $InstallCredential 
+                DependsOn                     = "[WindowsFeature]FailoverFeature"
+            }
+        }
+        else {
+            # Cluster IP Address specified - using ClusterIP
+            xCluster createCluster {
+                Name                          = $Node.ClusterName
+                StaticIPAddress               = $Node.ClusterIP
+                DomainAdministratorCredential = $InstallCredential 
+                DependsOn                     = "[WindowsFeature]FailoverFeature"
+            }   
         }
     }
-    else
+    Node $AllNodes.Where{ $_.NodeType -eq "Secondary" }.NodeName
     {
-        # Cluster IP Address specified - using ClusterIP
-        xCluster createCluster
-        {
-            Name = $Node.ClusterName
-            StaticIPAddress = $Node.ClusterIP
-            DomainAdministratorCredential = $InstallCredential 
-            DependsOn = "[WindowsFeature]FailoverFeature"
-        }   
-    }
-    }
-    Node $AllNodes.Where{ $_.NodeType -eq "Secondary"}.NodeName
-    {
-        xWaitForCluster waitForCluster
-        {
-            Name = $Node.ClusterName
+        xWaitForCluster waitForCluster {
+            Name             = $Node.ClusterName
             RetryIntervalSec = 10
-            RetryCount = 60
-            DependsOn = "[WindowsFeature]FailoverFeature"
+            RetryCount       = 60
+            DependsOn        = "[WindowsFeature]FailoverFeature"
         }
-        xCluster joinCluster
-        {
-            Name = $Node.ClusterName
+        xCluster joinCluster {
+            Name                          = $Node.ClusterName
             DomainAdministratorCredential = $InstallCredential 
-            DependsOn = "[xWaitForCluster]waitForCluster"
+            DependsOn                     = "[xWaitForCluster]waitForCluster"
         }
     }
 }
@@ -847,16 +836,14 @@ Configuration ConfigureAG
     
     Node $AllNodes.NodeName
     {
-        xWaitForCluster waitForCluster
-        {
-            Name = $Node.ClusterName
+        xWaitForCluster waitForCluster {
+            Name             = $Node.ClusterName
             RetryIntervalSec = 10
-            RetryCount = 60
+            RetryCount       = 60
         }
 
         # Ensure SQL Engine account is granted access to server
-        SqlLogin Add_WindowsUserSQLEngineAcct
-        {
+        SqlLogin Add_WindowsUserSQLEngineAcct {
             Ensure               = 'Present'
             Name                 = $SQLEngineServiceAccount.userName
             ServerName           = $Node.NodeName
@@ -865,8 +852,7 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Ensure SQL Agent account is granted access to server
-        SqlLogin Add_WindowsUserSQLAgentAcct
-        {
+        SqlLogin Add_WindowsUserSQLAgentAcct {
             Ensure               = 'Present'
             Name                 = $SQLAgentServiceAccount.userName
             ServerName           = $Node.NodeName
@@ -875,8 +861,7 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Ensure cluster account is granted access to server
-        SqlLogin Add_WindowsUserClusSvc
-        {
+        SqlLogin Add_WindowsUserClusSvc {
             Ensure               = 'Present'
             Name                 = 'NT Service\ClusSvc'
             ServerName           = $Node.NodeName
@@ -886,8 +871,7 @@ Configuration ConfigureAG
         }
 
         # Add the required permissions to the sql engine service login
-        SqlPermission AddNTServiceSQLEngineSvcPermissions
-        {
+        SqlPermission AddNTServiceSQLEngineSvcPermissions {
             DependsOn            = '[SqlLogin]Add_WindowsUserSQLEngineAcct'
             Ensure               = 'Present'
             ServerName           = $Node.NodeName
@@ -897,8 +881,7 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Add the required permissions to the sql agent service login
-        SqlPermission AddNTServiceSQLAgentSvcPermissions
-        {
+        SqlPermission AddNTServiceSQLAgentSvcPermissions {
             DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
             Ensure               = 'Present'
             ServerName           = $Node.NodeName
@@ -908,8 +891,7 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Add the required permissions to the cluster service login
-        SqlPermission AddNTServiceClusSvcPermissions
-        {
+        SqlPermission AddNTServiceClusSvcPermissions {
             DependsOn            = '[SqlLogin]Add_WindowsUserClusSvc'
             Ensure               = 'Present'
             ServerName           = $Node.NodeName
@@ -919,16 +901,14 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Ensure the HADR option is enabled for the instance
-        SqlAlwaysOnService EnableHADR
-        {
+        SqlAlwaysOnService EnableHADR {
             Ensure               = 'Present'
             InstanceName         = $SQLInstance
             ServerName           = $Node.NodeName
             PsDscRunAsCredential = $InstallCredential
         }
         # Create a DatabaseMirroring endpoint
-        SqlEndpoint HADREndpoint
-        {
+        SqlEndpoint HADREndpoint {
             EndPointName         = 'Hadr_endpoint'
             EndpointType         = 'DatabaseMirroring'
             Ensure               = 'Present'
@@ -939,8 +919,7 @@ Configuration ConfigureAG
             PsDscRunAsCredential = $InstallCredential
         }
         # Add permission of Service Account to each Endpoint
-        SqlEndpointPermission 'SQLConfigureEndpointPermission'
-        {
+        SqlEndpointPermission 'SQLConfigureEndpointPermission' {
             Ensure               = 'Present'
             Name                 = 'Hadr_endpoint'
             ServerName           = $Node.NodeName
@@ -950,54 +929,47 @@ Configuration ConfigureAG
             DependsOn            = '[SQLEndpoint]HADREndpoint'
         
             PsDscRunAsCredential = $SqlAdministratorCredential
-       }
-        if ($Node.NodeType -eq 'Primary')
-        {
-            SQLAG AddAG
-            {
-                Ensure          = 'Present'
-                Name            = $Node.AvailabilityGroupName
-                ServerName      = $Node.NodeName
-                InstanceName    = $SqlInstance
-                AvailabilityMode = 'SynchronousCommit'
-                FailoverMode    = 'Automatic'
+        }
+        if ($Node.NodeType -eq 'Primary') {
+            SQLAG AddAG {
+                Ensure                = 'Present'
+                Name                  = $Node.AvailabilityGroupName
+                ServerName            = $Node.NodeName
+                InstanceName          = $SqlInstance
+                AvailabilityMode      = 'SynchronousCommit'
+                FailoverMode          = 'Automatic'
                 DatabaseHealthTrigger = $true
-                DtcSupportEnabled = $true
-                DependsOn       = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[SQLAlwaysOnService]EnableHADR', '[SqlPermission]AddNTServiceClusSvcPermissions'
+                DtcSupportEnabled     = $true
+                DependsOn             = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[SQLAlwaysOnService]EnableHADR', '[SqlPermission]AddNTServiceClusSvcPermissions'
 
-                PsDscRunAsCredential = $InstallCredential
+                PsDscRunAsCredential  = $InstallCredential
             } 
-            if ($node.SkipSQLAGListenerCreation -eq $false)
-            {
+            if ($node.SkipSQLAGListenerCreation -eq $false) {
                 # handle if the server is configured with DHCP or static addresses
-                if ($node.AvailabilityGroupIP.length -gt 0)
-                {
-                    SQLAGListener AGListener
-                    {
-                        Ensure = 'Present'
-                        ServerName      = $Node.NodeName
-                        InstanceName    = $SqlInstance
-                        AvailabilityGroup = $Node.AvailabilityGroupName
-                        Name = $Node.AvailabilityGroupName
-                        Port = $Node.AvailabilityGroupPort
-                        IPAddress = $Node.AvailabilityGroupIP
-                        DependsOn = '[SQLAG]AddAG'                
+                if ($node.AvailabilityGroupIP.length -gt 0) {
+                    SQLAGListener AGListener {
+                        Ensure               = 'Present'
+                        ServerName           = $Node.NodeName
+                        InstanceName         = $SqlInstance
+                        AvailabilityGroup    = $Node.AvailabilityGroupName
+                        Name                 = $Node.AvailabilityGroupName
+                        Port                 = $Node.AvailabilityGroupPort
+                        IPAddress            = $Node.AvailabilityGroupIP
+                        DependsOn            = '[SQLAG]AddAG'                
                 
                         PsDscRunAsCredential = $InstallCredential
                     }
                 }
-                else
-                {
-                    SQLAGListener AGListener
-                    {
-                        Ensure = 'Present'
-                        ServerName      = $Node.NodeName
-                        InstanceName    = $SqlInstance
-                        AvailabilityGroup = $Node.AvailabilityGroupName
-                        Name = $Node.AvailabilityGroupName
-                        Port = $Node.AvailabilityGroupPort
-                        DHCP = $True
-                        DependsOn = '[SQLAG]AddAG'                
+                else {
+                    SQLAGListener AGListener {
+                        Ensure               = 'Present'
+                        ServerName           = $Node.NodeName
+                        InstanceName         = $SqlInstance
+                        AvailabilityGroup    = $Node.AvailabilityGroupName
+                        Name                 = $Node.AvailabilityGroupName
+                        Port                 = $Node.AvailabilityGroupPort
+                        DHCP                 = $True
+                        DependsOn            = '[SQLAG]AddAG'                
 
                         PsDscRunAsCredential = $InstallCredential
                     }
@@ -1005,30 +977,27 @@ Configuration ConfigureAG
             }
 
         }
-        if ($Node.NodeType -eq 'Secondary')
-        {
-            WaitForAll AGWait
-            {
-                ResourceName            = '[SQLAG]AddAG'
-                NodeName                = ($AllNodes | Where-Object {$_.NodeType -eq 'Primary'}).NodeName
-                RetryIntervalSec        = 20
-                RetryCount              = 30
-                PsDscRunAsCredential    = $InstallCredential
+        if ($Node.NodeType -eq 'Secondary') {
+            WaitForAll AGWait {
+                ResourceName         = '[SQLAG]AddAG'
+                NodeName             = ($AllNodes | Where-Object { $_.NodeType -eq 'Primary' }).NodeName
+                RetryIntervalSec     = 20
+                RetryCount           = 30
+                PsDscRunAsCredential = $InstallCredential
             }
-            SQLAGReplica AddReplica
-            {
-                Ensure                  ='Present'
-                Name                    = $Node.NodeName
-                AvailabilityGroupName   = $Node.AvailabilityGroupName
-                ServerName              = $Node.NodeName
-                InstanceName            = $SqlInstance
-                AvailabilityMode        = 'SynchronousCommit'
-                FailoverMode            = 'Automatic'
-                PrimaryReplicaServerName = ($AllNodes | Where-Object {$_.NodeType -eq 'Primary'}).NodeName
+            SQLAGReplica AddReplica {
+                Ensure                     = 'Present'
+                Name                       = $Node.NodeName
+                AvailabilityGroupName      = $Node.AvailabilityGroupName
+                ServerName                 = $Node.NodeName
+                InstanceName               = $SqlInstance
+                AvailabilityMode           = 'SynchronousCommit'
+                FailoverMode               = 'Automatic'
+                PrimaryReplicaServerName   = ($AllNodes | Where-Object { $_.NodeType -eq 'Primary' }).NodeName
                 PrimaryReplicaInstanceName = $SqlInstance
-                DependsOn               = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[WaitForAll]AGWait'
+                DependsOn                  = '[SqlEndpointPermission]SQLConfigureEndpointPermission', '[WaitForAll]AGWait'
 
-                PsDscRunAsCredential    = $InstallCredential
+                PsDscRunAsCredential       = $InstallCredential
             }
         }
     }
@@ -1046,25 +1015,25 @@ $config = @{
             AddOSAdminToHostAdmin       = $AddOSAdminToHostAdmin.IsPresent
             NumberOfDataDrives          = $NumberOfNonOSDrives
 
-            ClusterName                = $ClusterName
-            ClusterIP                  = $ClusterIP
-            AvailabilityGroupName      = $SQLAGName
-            AvailabilityGroupIP        = $SQLAGIPAddr
-            AvailabilityGroupPort      = $SQLAGPort
-            SkipSQLAGListenerCreation  = $SkipSQLAGListenerCreation.IsPresent
+            ClusterName                 = $ClusterName
+            ClusterIP                   = $ClusterIP
+            AvailabilityGroupName       = $SQLAGName
+            AvailabilityGroupIP         = $SQLAGIPAddr
+            AvailabilityGroupPort       = $SQLAGPort
+            SkipSQLAGListenerCreation   = $SkipSQLAGListenerCreation.IsPresent
         }
     )
 } 
 # configuration specific to primary node
 $config.AllNodes += @{
-    NodeName                    = $p
-    NodeType                    = 'Primary'
+    NodeName = $p
+    NodeType = 'Primary'
 }
 # configuration specific to all other nodes
 foreach ($c in $s) {
     $config.AllNodes += @{
-        NodeName                    = $c 
-        NodeType                    = 'Secondary'
+        NodeName = $c 
+        NodeType = 'Secondary'
     }
 }
 
@@ -1094,13 +1063,12 @@ if ($SkipSQLInstall.isPresent -eq $false) {
 }
 
 #Configure IsInAvailabilityGroup
-if ($IsInAvailabilityGroup.IsPresent -eq $true)
-{
+if ($IsInAvailabilityGroup.IsPresent -eq $true) {
     ConfigureCluster -ConfigurationData $config -OutputPath "$Dir\MOF\Cluster" 
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-    write-host "##### Starting sleep cycle @ " (get-date)
+    Write-Host "##### Starting sleep cycle @ " (Get-Date)
     Start-Sleep -Seconds 300 
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
@@ -1120,4 +1088,4 @@ if ($SkipPostDeployment.IsPresent -eq $false) {
 }
 
 # remove mof files generated during install
-remove-item "$Dir\MOF" -Force -Recurse
+Remove-Item "$Dir\MOF" -Force -Recurse
