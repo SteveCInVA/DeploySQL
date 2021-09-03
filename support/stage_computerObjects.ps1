@@ -103,7 +103,7 @@ if ($action -eq 'delete') {
     }
     #delete cluster name
     try {
-        Remove-ADObject -Identity "CN=$ClusterName,$ObjectPath" -Confirm:$False -Recursive
+        Remove-ADObject -Identity "CN=$ClusterName,$ObjectPath" -Confirm:$False 
         Write-Verbose "Deleted $ClusterName computer object"
     }
     catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
