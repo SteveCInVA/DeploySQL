@@ -503,31 +503,6 @@ Configuration InstallSQLEngine
     Import-DscResource -ModuleName AccessControlDSC 
     Import-DscResource -ModuleName NetworkingDsc 
 
-    Node $AllNodes.Where{ $_.SkipSSMS -eq $false }.NodeName
-    {
-        #Copy SSMS media
-        File InstallMediaSSMS { 
-            DestinationPath = 'C:\Software\SSMS' 
-            SourcePath      = "$InstallSourcePath\InstallMedia\SQLManagementStudio" 
-            Type            = 'Directory' 
-            Ensure          = 'Present' 
-            MatchSource     = $true 
-            Recurse         = $true 
-            Force           = $true 
-            Credential      = $InstallCredential 
-        } 
-
-        #SSMS Installation
-        Package SSMS { 
-            Ensure    = 'Present' 
-            Name      = 'SSMS-Setup-ENU.exe' 
-            Path      = 'c:\Software\SSMS\SSMS-Setup-ENU.exe' 
-            Arguments = '/install /quiet /norestart /DoNotInstallAzureDataStudio=1' 
-            ProductID = '{FFEDA3B1-242E-40C2-BB23-7E3B87DAC3C1}' ## this product id is associated to SSMS 18.9.1 
-            DependsOn = '[File]InstallMediaSSMS', '[SQLSetup]Instance' 
-        } 
-    } 
-
     Node $AllNodes.Where{ $_.AddOSAdminToHostAdmin -eq $true }.NodeName
     {
         Group AdministratorsGroup {
@@ -754,6 +729,31 @@ Configuration InstallSQLEngine
             ValueType = "MultiString" 
             ValueName = "InstallParameters" 
             ValueData = @("Computer=$Computer", "Instance=$Instance", "SQLVersion=$SQLVersion", "NumberOfNonOSDrives=$NumberOfNonOSDrives", "InstallSourcePath=$InstallSourcePath", "DBAOSAdminGroup=$DBAOSAdminGroup", "DBASQLAdminGroup=$DBASQLAdminGroup", "SkipDriveConfig=$SkipDriveConfig", "InstallCredential=$username") 
+        } 
+    } 
+
+    Node $AllNodes.Where{ $_.SkipSSMS -eq $false }.NodeName
+    {
+        #Copy SSMS media
+        File InstallMediaSSMS { 
+            DestinationPath = 'C:\Software\SSMS' 
+            SourcePath      = "$InstallSourcePath\InstallMedia\SQLManagementStudio" 
+            Type            = 'Directory' 
+            Ensure          = 'Present' 
+            MatchSource     = $true 
+            Recurse         = $true 
+            Force           = $true 
+            Credential      = $InstallCredential 
+        } 
+
+        #SSMS Installation
+        Package SSMS { 
+            Ensure    = 'Present' 
+            Name      = 'SSMS-Setup-ENU.exe' 
+            Path      = 'c:\Software\SSMS\SSMS-Setup-ENU.exe' 
+            Arguments = '/install /quiet /norestart /DoNotInstallAzureDataStudio=1' 
+            ProductID = '{FFEDA3B1-242E-40C2-BB23-7E3B87DAC3C1}' ## this product id is associated to SSMS 18.9.1 
+            DependsOn = '[File]InstallMediaSSMS', '[SQLSetup]Instance' 
         } 
     } 
 } 
@@ -1044,7 +1044,14 @@ $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredenti
 
 #Configure LCM 
 LCMConfig -ConfigurationData $config -OutputPath "$Dir\MOF\LCMConfig" 
-Set-DscLocalConfigurationManager -Path "$Dir\MOF\LCMConfig" -CimSession $cSessions -Verbose -Force 
+try {
+    Set-DscLocalConfigurationManager -Path "$Dir\MOF\LCMConfig" -CimSession $cSessions -Force 
+    Write-Output "Completed configurations of LCM on target machines"
+}
+catch {
+    Write-Error -Exception $_.Exception -Message "Error configuring LCM"
+    return $false
+}
 
 #Install Required PsDSCModules 
 InstallRequiredPSModules -ConfigurationData $config -OutputPath "$Dir\MOF\InstallPSModules" 
