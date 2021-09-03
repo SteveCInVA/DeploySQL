@@ -263,7 +263,7 @@ IF ($IsInAvailabilityGroup.IsPresent -eq $true) {
         $valid = $false
     }
     IF ($SQLHADREndpointPort -eq 0) {
-        Write-Warning "IsInAvailabilityGroup parameter is specified byt SQLHADREndpointPort is missing"
+        Write-Warning "IsInAvailabilityGroup parameter is specified but SQLHADREndpointPort is missing"
         $valid = $false
     }
 }
@@ -284,7 +284,7 @@ IF ($Instance.Length -EQ 0) {
     $SQLInstance = 'MSSQLSERVER' 
     $InstancePath = '' 
     $FirewallSvc = 'MSSQLSERVER' 
-    $SvcName = '' 
+    $SvcName = ''
 } 
 else { 
     $SQLInstance = $Instance 
@@ -917,7 +917,7 @@ Configuration ConfigureAG
         }
         # Create a DatabaseMirroring endpoint
         SqlEndpoint HADREndpoint {
-            EndPointName         = 'Hadr_endpoint'
+            EndPointName         = ("Hadr_Endpoint-" + $Node.InstanceName) 
             EndpointType         = 'DatabaseMirroring'
             Ensure               = 'Present'
             Port                 = $Node.HADREndpointPort
@@ -929,7 +929,7 @@ Configuration ConfigureAG
         # Add permission of Service Account to each Endpoint
         SqlEndpointPermission 'SQLConfigureEndpointPermission' {
             Ensure               = 'Present'
-            Name                 = 'Hadr_endpoint'
+            Name                 = ("Hadr_Endpoint-" + $Node.InstanceName)
             ServerName           = $Node.NodeName
             InstanceName         = $SqlInstance
             Principal            = $SQLEngineServiceAccount.userName
@@ -995,7 +995,7 @@ Configuration ConfigureAG
             }
             SQLAGReplica AddReplica {
                 Ensure                     = 'Present'
-                Name                       = $Node.NodeName
+                Name                       = $Node.SQLInstanceName
                 AvailabilityGroupName      = $Node.AvailabilityGroupName
                 ServerName                 = $Node.NodeName
                 InstanceName               = $SqlInstance
@@ -1022,6 +1022,7 @@ $config = @{
             SkipSSMS                    = $SkipSSMS.IsPresent
             AddOSAdminToHostAdmin       = $AddOSAdminToHostAdmin.IsPresent
             NumberOfDataDrives          = $NumberOfNonOSDrives
+            InstanceName                = $Instance
 
             ClusterName                 = $ClusterName
             ClusterIP                   = $ClusterIP
@@ -1037,16 +1038,18 @@ $config = @{
 $config.AllNodes += @{
     NodeName = $p
     NodeType = 'Primary'
+    SQLInstanceName = "$p\$Instance"
 }
 # configuration specific to all other nodes
 foreach ($c in $s) {
     $config.AllNodes += @{
         NodeName = $c 
         NodeType = 'Secondary'
+        SQLInstanceName = "$c\$Instance"
     }
 }
 
-#$config.AllNodes | out-string | write-host
+$config.AllNodes | out-string | write-host
 
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
