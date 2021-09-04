@@ -175,6 +175,7 @@ param (
 
 $scriptVersion = '1.4.2' 
 $InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K" 
+$StartTime = $(get-date)
 
 ##########################################
 #begin validation of parameters
@@ -775,9 +776,13 @@ Configuration ConfigureCluster
     #base feature install
     Node $AllNodes.NodeName
     {
+        PendingReboot BeforeClusterFeature {
+            Name      = "BeforeClusterFeature"
+        }
         WindowsFeature FailoverFeature {
             Ensure = "Present"
             Name   = "Failover-Clustering"
+            DependsOn = "[PendingReboot]BeforeClusterFeature"
         }
         PendingReboot AfterClusterFeature {
             Name      = "AfterClusterFeature"
@@ -1049,7 +1054,7 @@ foreach ($c in $s) {
     }
 }
 
-$config.AllNodes | out-string | write-host
+#$config.AllNodes | out-string | write-host
 
 #create an array of CIM Sessions 
 $cSessions = New-CimSession -ComputerName $Computer -Credential $InstallCredential 
@@ -1087,8 +1092,8 @@ if ($IsInAvailabilityGroup.IsPresent -eq $true) {
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop 
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-#    Write-Host "##### Starting sleep cycle @ " (Get-Date)
-#    Start-Sleep -Seconds 300 
+    Write-Host "##### Starting sleep cycle @ " (Get-Date)
+    Start-Sleep -Seconds 300 
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"    
     Start-DscConfiguration -Path "$Dir\MOF\AG" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
@@ -1108,3 +1113,7 @@ if ($SkipPostDeployment.IsPresent -eq $false) {
 
 # remove mof files generated during install
 Remove-Item "$Dir\MOF" -Force -Recurse
+
+$elapsedTime = $(get-date) - $StartTime
+$totalTime = "{0:HH:mm:ss}" -f ([datetime]$elapsedTime.Ticks)
+write-host "Installation duration: $totalTime"
