@@ -3,5 +3,3 @@ InstallMedia/**
 !InstallMedia/**/*.txt
 
 MOF/**
-
-tester*.ps1
