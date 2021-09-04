@@ -24,6 +24,12 @@
  - Ensure DBATeam is granted file system permissions to necessary SQL folders 
  - Configures Windows Cluster / Availability Group
  - Execute SQL Server Post Installation Configuration Script .\SQLInstanceConfiguration.ps1 
+
+ #####
+ Known Issues
+ - By adding in the -IsInAvailabilityGroup switch, if you don't have the -SkipSSMS switch enabled on the first installation,
+    things appear to hang.  Investigating reboot cycles to help eliminate the issue, but for the workaround, on initial cluster creation
+    include the -SkipSSMS flag.  Subsequent executions should work fine.
   
  .INPUTS
  
