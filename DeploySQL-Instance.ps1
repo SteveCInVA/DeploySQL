@@ -770,6 +770,32 @@ Configuration InstallSQLEngine
             ProductID = '{FFEDA3B1-242E-40C2-BB23-7E3B87DAC3C1}' ## this product id is associated to SSMS 18.9.1 
             DependsOn = '[File]InstallMediaSSMS', '[SQLSetup]Instance' 
         } 
+
+        Script RebootAfterSSMS
+        {
+            GetScript = { 
+                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | select-object IsRebootPending) 
+                write-verbose ("IsRebootPending = " + $x.IsRebootPending)
+                return @{ Result = "!$x.IsRebootPending"}
+            }
+
+            SetScript = {
+                Write-Verbose "Restarting Server"
+                Restart-Computer -Force
+            }
+            TestScript = { 
+                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | select-object IsRebootPending) 
+                write-verbose ("IsRebootPending = " + $x.IsRebootPending)
+                !$x.IsRebootPending
+            }
+            DependsOn = "[Package]SSMS"
+        }
+        Log LogCompletion
+        {
+            Message = "After reboot of SSMS"
+            DependsOn = "[Script]RebootAfterSSMS"
+        }
+
     } 
 } 
 
