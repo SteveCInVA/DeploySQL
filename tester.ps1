@@ -15,16 +15,16 @@ $InstallCredential = New-Object -TypeName System.Management.Automation.PSCredent
 
 $Parameters = @{
     Computer = 'sql01a', 'sql01b', 'sql01c'
-    Instance = 'Inst1'
+    Instance = 'Inst2'
     SQLVersion = 'SQL2019'
     
     IsInAvailabilityGroup = $True
     ClusterName = 'SQLCluster'
     #ClusterIP = 1.2.3.4
-    SQLAGName = 'AGInst1'
+    SQLAGName = 'AGInst2'
     #SQLAGIPAddr = 1.2.3.5
-    SQLAGPort = 1436
-    SQLHADREndpointPort = 5023
+    SQLAGPort = 1437
+    SQLHADREndpointPort = 5024
     SkipSQLAGListenerCreation = $True
 
     NumberOfNonOSDrives = 1
