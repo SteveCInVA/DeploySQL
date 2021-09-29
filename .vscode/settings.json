@@ -25,6 +25,8 @@
         "subfolders",
         "tempdb"
     ],
+    "editor.rulers": [ 120 ],
+    "files.trimTrailingWhitespace": true,
     "powershell.codeFormatting.autoCorrectAliases": true,
     "powershell.codeFormatting.useCorrectCasing": true,
     "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
