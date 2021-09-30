@@ -286,6 +286,10 @@ if ($valid -eq $false) {
 #copyFiles -SourcePath "$dir\PSModules" -DestPath "$Env:HOMEDRIVE$Env:HOMEPATH\Documents\WindowsPowerShell\Modules" -Verbose
 copyFiles -SourcePath "$dir\PSModules" -DestPath "$env:ProgramFiles\WindowsPowerShell\Modules" -Verbose
 
+# get Installing Username for later
+$InstallUserName = $InstallCredential.UserName
+
+
 #define instance dependent variables
 IF ($Instance.Length -EQ 0) {
     $SQLInstance = 'MSSQLSERVER'
@@ -753,22 +757,22 @@ Configuration InstallSQLEngine
                     "SQLAgentServiceAccount=$SQLAgentServiceAccount",
                     "DBAOSAdminGroup=$DBAOSAdminGroup",
                     "DBASQLAdminGroup=$DBASQLAdminGroup",
-                    "IsAzureVM=$IsAzureVM.IsPresent",
+                    "IsAzureVM=$IsAzureVM",
                     "SkipDriveConfig=$SkipDriveConfig",
-                    "SkipSQLInstall=$SkipSQLInstall.IsPresent",
-                    "NoOpticalDrive=$NoOpticalDrive.IsPresent",
-                    "AddOSAdminToHostAdmin=$AddOSAdminToHostAdmin.IsPresent",
-                    "IsInAvailabilityGroup=$IsInAvailabilityGroup.IsPresent",
+                    "SkipSQLInstall=$SkipSQLInstall",
+                    "NoOpticalDrive=$NoOpticalDrive",
+                    "AddOSAdminToHostAdmin=$AddOSAdminToHostAdmin",
+                    "IsInAvailabilityGroup=$IsInAvailabilityGroup",
                     "ClusterName=$ClusterName",
                     "ClusterIP=$ClusterIP",
                     "SQLAGName=$SQLAGName",
                     "SQLHADREndpointPort=$SQLHADREndpointPort",
                     "SQLAGIPAddr=$SQLAGIPAddr",
                     "SQLAGPort=$SQLAGPort",
-                    "SkipSQLAGListenerCreation=$SkipSQLAGListenerCreation.IsPresent",
-                    "SkipSSMS=$SkipSSMS.IsPresent",
-                    "SkipPostDeployment=$SkipPostDeployment.IsPresent",
-                    "InstallCredential=$username"
+                    "SkipSQLAGListenerCreation=$SkipSQLAGListenerCreation",
+                    "SkipSSMS=$SkipSSMS",
+                    "SkipPostDeployment=$SkipPostDeployment",
+                    "InstallCredential=$InstallUserName"
                     )
         }
     }
