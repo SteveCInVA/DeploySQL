@@ -3,7 +3,7 @@ Param(
     [Parameter (Mandatory = $true)] 
     [string[]]$Computer,
     
-    [Parameter (Mandatory = $true)] 
+    [Parameter (Mandatory = $false)] 
     [string]$ClusterName,
 
     [Parameter (Mandatory = $false)] 
@@ -33,40 +33,41 @@ if ($Action -eq 'create') {
         }
     } 
     
-    #create cluster object disabled
-    try {
-        New-ADComputer -Name $ClusterName -SamAccountName $ClusterName -Path $ObjectPath -Enabled $false
-        Write-Verbose "Created disabled cluster account $ClusterName in $ObjectPath"
-    }
-    catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
-        Write-Warning "Cluster Object $ClusterName was already found... skipping"  
-    }
-    catch {
-        Write-Error -Exception $_.Exception -Message "Error creating disabled cluster object"
-    }
+    if (($ClusterName -ne $null) -and ($ClusterName -ne "")){
+        #create cluster object disabled
+        try {
+            New-ADComputer -Name $ClusterName -SamAccountName $ClusterName -Path $ObjectPath -Enabled $false
+            Write-Verbose "Created disabled cluster account $ClusterName in $ObjectPath"
+        }
+        catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
+            Write-Warning "Cluster Object $ClusterName was already found... skipping"  
+        }
+        catch {
+            Write-Error -Exception $_.Exception -Message "Error creating disabled cluster object"
+        }
 
-    #Grant Access to cluster object
-    try {
-        $acl = Get-Acl "ad:CN=$ClusterName,$ObjectPath"
-        $adRights = [System.DirectoryServices.ActiveDirectoryRights] "GenericAll"
-        $type = [System.Security.AccessControl.AccessControlType] "Allow"
-        $inheritanceType = [System.DirectoryServices.ActiveDirectorySecurityInheritance] "All"
+        #Grant Access to cluster object
+        try {
+            $acl = Get-Acl "ad:CN=$ClusterName,$ObjectPath"
+            $adRights = [System.DirectoryServices.ActiveDirectoryRights] "GenericAll"
+            $type = [System.Security.AccessControl.AccessControlType] "Allow"
+            $inheritanceType = [System.DirectoryServices.ActiveDirectorySecurityInheritance] "All"
     
-        foreach ($c in $Computer) {
-            $adc = Get-ADComputer $c
-            $sid = [System.Security.Principal.SecurityIdentifier] $adc.SID
-            $identity = [System.Security.Principal.IdentityReference] $SID
-            $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule $identity, $adRights, $type, $inheritanceType
-            # Add the ACE to the ACL, then set the ACL to save the changes
-            $acl.AddAccessRule($ace)
-            Set-Acl -AclObject $acl "ad:CN=$ClusterName,$ObjectPath"
-            Write-Verbose "Granted 'Full Control' to $c on Cluster object $ClusterName"
+            foreach ($c in $Computer) {
+                $adc = Get-ADComputer $c
+                $sid = [System.Security.Principal.SecurityIdentifier] $adc.SID
+                $identity = [System.Security.Principal.IdentityReference] $SID
+                $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule $identity, $adRights, $type, $inheritanceType
+                # Add the ACE to the ACL, then set the ACL to save the changes
+                $acl.AddAccessRule($ace)
+                Set-Acl -AclObject $acl "ad:CN=$ClusterName,$ObjectPath"
+                Write-Verbose "Granted 'Full Control' to $c on Cluster object $ClusterName"
+            }
+        }
+        catch {
+            Write-Error -Exception $_.Exception -Message "Error granting access to cluster object"
         }
     }
-    catch {
-        Write-Error -Exception $_.Exception -Message "Error granting access to cluster object"
-    }
-
     #disable computer accounts
     if (!($doNotDisableComputerAccounts.isPresent)) {
         foreach ($c in $Computer) {
