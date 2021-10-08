@@ -1159,8 +1159,9 @@ if ($IsInAvailabilityGroup.IsPresent -eq $true) {
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
     $ts = New-TimeSpan -Seconds 300
+    $resumeTime = (Get-Date) + $ts
     Write-Host "##### Starting sleep cycle at " (Get-Date)
-    Write-Host "##### Script will resume at " (Get-Date) + $ts
+    Write-Host "##### Script will resume at " $resumeTime
     Start-Sleep -Seconds 300
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"
