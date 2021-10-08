@@ -181,7 +181,7 @@ param (
 
 $scriptVersion = '1.4.2'
 $InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K"
-$StartTime = $(get-date)
+$StartTime = $(Get-Date)
 
 ##########################################
 #begin validation of parameters
@@ -748,32 +748,32 @@ Configuration InstallSQLEngine
             ValueType = "MultiString"
             ValueName = "InstallParameters"
             ValueData = @(
-                    "Computer=$Computer",
-                    "Instance=$Instance",
-                    "SQLVersion=$SQLVersion",
-                    "NumberOfNonOSDrives=$NumberOfNonOSDrives",
-                    "InstallSourcePath=$InstallSourcePath",
-                    "SQLEngineServiceAccount=$SQLEngineServiceAccount",
-                    "SQLAgentServiceAccount=$SQLAgentServiceAccount",
-                    "DBAOSAdminGroup=$DBAOSAdminGroup",
-                    "DBASQLAdminGroup=$DBASQLAdminGroup",
-                    "IsAzureVM=$IsAzureVM",
-                    "SkipDriveConfig=$SkipDriveConfig",
-                    "SkipSQLInstall=$SkipSQLInstall",
-                    "NoOpticalDrive=$NoOpticalDrive",
-                    "AddOSAdminToHostAdmin=$AddOSAdminToHostAdmin",
-                    "IsInAvailabilityGroup=$IsInAvailabilityGroup",
-                    "ClusterName=$ClusterName",
-                    "ClusterIP=$ClusterIP",
-                    "SQLAGName=$SQLAGName",
-                    "SQLHADREndpointPort=$SQLHADREndpointPort",
-                    "SQLAGIPAddr=$SQLAGIPAddr",
-                    "SQLAGPort=$SQLAGPort",
-                    "SkipSQLAGListenerCreation=$SkipSQLAGListenerCreation",
-                    "SkipSSMS=$SkipSSMS",
-                    "SkipPostDeployment=$SkipPostDeployment",
-                    "InstallCredential=$InstallUserName"
-                    )
+                "Computer=$Computer",
+                "Instance=$Instance",
+                "SQLVersion=$SQLVersion",
+                "NumberOfNonOSDrives=$NumberOfNonOSDrives",
+                "InstallSourcePath=$InstallSourcePath",
+                "SQLEngineServiceAccount=$SQLEngineServiceAccount",
+                "SQLAgentServiceAccount=$SQLAgentServiceAccount",
+                "DBAOSAdminGroup=$DBAOSAdminGroup",
+                "DBASQLAdminGroup=$DBASQLAdminGroup",
+                "IsAzureVM=$IsAzureVM",
+                "SkipDriveConfig=$SkipDriveConfig",
+                "SkipSQLInstall=$SkipSQLInstall",
+                "NoOpticalDrive=$NoOpticalDrive",
+                "AddOSAdminToHostAdmin=$AddOSAdminToHostAdmin",
+                "IsInAvailabilityGroup=$IsInAvailabilityGroup",
+                "ClusterName=$ClusterName",
+                "ClusterIP=$ClusterIP",
+                "SQLAGName=$SQLAGName",
+                "SQLHADREndpointPort=$SQLHADREndpointPort",
+                "SQLAGIPAddr=$SQLAGIPAddr",
+                "SQLAGPort=$SQLAGPort",
+                "SkipSQLAGListenerCreation=$SkipSQLAGListenerCreation",
+                "SkipSSMS=$SkipSSMS",
+                "SkipPostDeployment=$SkipPostDeployment",
+                "InstallCredential=$InstallUserName"
+            )
         }
     }
 
@@ -801,28 +801,26 @@ Configuration InstallSQLEngine
             DependsOn = '[File]InstallMediaSSMS', '[SQLSetup]Instance'
         }
 
-        Script RebootAfterSSMS
-        {
-            GetScript = {
-                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | select-object IsRebootPending)
-                write-verbose ("IsRebootPending = " + $x.IsRebootPending)
-                return @{ Result = "!$x.IsRebootPending"}
+        Script RebootAfterSSMS {
+            GetScript  = {
+                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | Select-Object IsRebootPending)
+                Write-Verbose ("IsRebootPending = " + $x.IsRebootPending)
+                return @{ Result = "!$x.IsRebootPending" }
             }
 
-            SetScript = {
+            SetScript  = {
                 Write-Verbose "Restarting Server"
                 Restart-Computer -Force
             }
             TestScript = {
-                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | select-object IsRebootPending)
-                write-verbose ("IsRebootPending = " + $x.IsRebootPending)
+                $x = (Test-PendingReboot -SkipConfigurationManagerClientCheck | Select-Object IsRebootPending)
+                Write-Verbose ("IsRebootPending = " + $x.IsRebootPending)
                 !$x.IsRebootPending
             }
-            DependsOn = "[Package]SSMS"
+            DependsOn  = "[Package]SSMS"
         }
-        Log LogCompletion
-        {
-            Message = "After reboot of SSMS"
+        Log LogCompletion {
+            Message   = "After reboot of SSMS"
             DependsOn = "[Script]RebootAfterSSMS"
         }
 
@@ -839,11 +837,11 @@ Configuration ConfigureCluster
     Node $AllNodes.NodeName
     {
         PendingReboot BeforeClusterFeature {
-            Name      = "BeforeClusterFeature"
+            Name = "BeforeClusterFeature"
         }
         WindowsFeature FailoverFeature {
-            Ensure = "Present"
-            Name   = "Failover-Clustering"
+            Ensure    = "Present"
+            Name      = "Failover-Clustering"
             DependsOn = "[PendingReboot]BeforeClusterFeature"
         }
         PendingReboot AfterClusterFeature {
@@ -926,25 +924,6 @@ Configuration ConfigureAG
             InstanceName         = $SQLInstance
             PsDscRunAsCredential = $InstallCredential
         }
-        # Ensure SQL Agent account is granted access to server
-        SqlLogin Add_WindowsUserSQLAgentAcct {
-            Ensure               = 'Present'
-            Name                 = $SQLAgentServiceAccount.userName
-            ServerName           = $Node.NodeName
-            LoginType            = 'WindowsUser'
-            InstanceName         = $SQLInstance
-            PsDscRunAsCredential = $InstallCredential
-        }
-        # Ensure cluster account is granted access to server
-        SqlLogin Add_WindowsUserClusSvc {
-            Ensure               = 'Present'
-            Name                 = 'NT Service\ClusSvc'
-            ServerName           = $Node.NodeName
-            LoginType            = 'WindowsUser'
-            InstanceName         = $SQLInstance
-            PsDscRunAsCredential = $InstallCredential
-        }
-
         # Add the required permissions to the sql engine service login
         SqlPermission AddNTServiceSQLEngineSvcPermissions {
             DependsOn            = '[SqlLogin]Add_WindowsUserSQLEngineAcct'
@@ -955,14 +934,38 @@ Configuration ConfigureAG
             Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
             PsDscRunAsCredential = $InstallCredential
         }
-        # Add the required permissions to the sql agent service login
-        SqlPermission AddNTServiceSQLAgentSvcPermissions {
-            DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
+
+        #failure identified if the user specified the same account for the sql engine and sql agent.
+        #determined root issue was a duplicate key in the generated mof file.
+        if ($SQLEngineServiceAccount.userName -ne $SQLAgentServiceAccount.userName) {
+            # Ensure SQL Agent account is granted access to server
+            SqlLogin Add_WindowsUserSQLAgentAcct {
+                Ensure               = 'Present'
+                Name                 = $SQLAgentServiceAccount.userName
+                ServerName           = $Node.NodeName
+                LoginType            = 'WindowsUser'
+                InstanceName         = $SQLInstance
+                PsDscRunAsCredential = $InstallCredential
+            }
+            # Add the required permissions to the sql agent service login
+            SqlPermission AddNTServiceSQLAgentSvcPermissions {
+                DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
+                Ensure               = 'Present'
+                ServerName           = $Node.NodeName
+                InstanceName         = $SQLInstance
+                Principal            = $SQLAgentServiceAccount.userName
+                Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
+                PsDscRunAsCredential = $InstallCredential
+            }
+        }
+
+        # Ensure cluster account is granted access to server
+        SqlLogin Add_WindowsUserClusSvc {
             Ensure               = 'Present'
+            Name                 = 'NT Service\ClusSvc'
             ServerName           = $Node.NodeName
+            LoginType            = 'WindowsUser'
             InstanceName         = $SQLInstance
-            Principal            = $SQLAgentServiceAccount.userName
-            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
             PsDscRunAsCredential = $InstallCredential
         }
         # Add the required permissions to the cluster service login
@@ -975,6 +978,7 @@ Configuration ConfigureAG
             Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
             PsDscRunAsCredential = $InstallCredential
         }
+
         # Ensure the HADR option is enabled for the instance
         SqlAlwaysOnService EnableHADR {
             Ensure               = 'Present'
@@ -1103,15 +1107,15 @@ $config = @{
 }
 # configuration specific to primary node
 $config.AllNodes += @{
-    NodeName = $p
-    NodeType = 'Primary'
+    NodeName        = $p
+    NodeType        = 'Primary'
     SQLInstanceName = "$p\$Instance"
 }
 # configuration specific to all other nodes
 foreach ($c in $s) {
     $config.AllNodes += @{
-        NodeName = $c
-        NodeType = 'Secondary'
+        NodeName        = $c
+        NodeType        = 'Secondary'
         SQLInstanceName = "$c\$Instance"
     }
 }
@@ -1154,7 +1158,9 @@ if ($IsInAvailabilityGroup.IsPresent -eq $true) {
     Start-DscConfiguration -Path "$Dir\MOF\Cluster" -Wait -Verbose -CimSession $cSessions -ErrorAction Stop
 
     # visibility is lost in the above step.  pause for 5 minutes while host is rebooted, and cluster configuration is completed
-    Write-Host "##### Starting sleep cycle @ " (Get-Date)
+    $ts = New-TimeSpan -Seconds 300
+    Write-Host "##### Starting sleep cycle at " (Get-Date)
+    Write-Host "##### Script will resume at " (Get-Date) + $ts
     Start-Sleep -Seconds 300
 
     ConfigureAG -ConfigurationData $config -OutputPath "$Dir\MOF\AG"
@@ -1176,6 +1182,6 @@ if ($SkipPostDeployment.IsPresent -eq $false) {
 # remove mof files generated during install
 Remove-Item "$Dir\MOF" -Force -Recurse
 
-$elapsedTime = $(get-date) - $StartTime
+$elapsedTime = $(Get-Date) - $StartTime
 $totalTime = "{0:HH:mm:ss}" -f ([datetime]$elapsedTime.Ticks)
-write-host "Installation duration: $totalTime"
+Write-Host "Installation duration: $totalTime"
