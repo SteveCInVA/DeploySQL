@@ -7,6 +7,9 @@ Param(
     [string]$ClusterName,
 
     [Parameter (Mandatory = $false)]
+    [string[]]$VirtualClusterObject,
+
+    [Parameter (Mandatory = $false)]
     [string]$ObjectPath = "OU=SQL,OU=Servers,DC=Contoso,DC=COM",
 
     [Parameter (Mandatory = $false)]
@@ -16,6 +19,43 @@ Param(
     [switch]$doNotDisableAccounts,
     [switch]$doNotDeleteComputerAccounts
 )
+
+
+##########################################
+# perform parameter validations
+$valid = $null
+
+# check length of computer names is less than 15 characters
+foreach ($c in $Computer) {
+    if($c.Length -gt 15){
+        Write-Warning "Computer $c length is greater than 15 characters."
+        $valid = $false
+    }
+}
+
+if ($ClusterName.Length -gt 15){
+    Write-Warning "ClusterName parameter length is greater than 15 characters."
+    $valid = $false
+}
+
+foreach ($c in $VirtualClusterObject) {
+    if($c.Length -gt 15){
+        Write-Warning "VirtualComputerObject $c length is greater than 15 characters."
+        $valid = $false
+    }
+}
+
+# check if Virtual Cluster Objects is specified but cluster name is not
+if (($VirtualClusterObject.length -gt 0) -and ($ClusterName.Length -eq 0)) {
+    Write-Warning "VirtualClusterObject parameter is specified but ClusterName is missing"
+    $valid = $false
+}
+##########################################
+# end of validations...  if any tests fail, quit
+if ($valid -eq $false) {
+    break
+}
+##########################################
 
 if ($Action -eq 'create') {
     #Create computer objects
@@ -33,8 +73,8 @@ if ($Action -eq 'create') {
         }
     }
 
+    #Create Cluster Object
     if (($ClusterName -ne $null) -and ($ClusterName -ne "")){
-        #create cluster object disabled
         try {
             New-ADComputer -Name $ClusterName -SamAccountName $ClusterName -Path $ObjectPath -Enabled $false
             Write-Verbose "Created disabled cluster account $ClusterName in $ObjectPath"
@@ -77,6 +117,44 @@ if ($Action -eq 'create') {
             }
         }
     }
+
+    #virtual cluster objects
+    foreach ($vco in $VirtualClusterObject) {
+        #create virtual cluster objects
+        try {
+            New-ADComputer -Name $vco -SamAccountName $vco -Path $ObjectPath -Enabled $false
+            Write-Verbose "Created virtual cluster object $vco in $ObjectPath"
+        }
+        catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
+            Write-Warning "Virtual cluster object $vco was already found... skipping"
+        }
+        catch {
+            Write-Error -Exception $_.Exception -Message "Error creating disabled virtual cluster object"
+        }
+    }
+
+        #Grant Access to virtual cluster object
+    foreach ($vco in $VirtualClusterObject) {
+        try {
+            $acl = Get-Acl "ad:CN=$vco,$ObjectPath"
+            $adRights = [System.DirectoryServices.ActiveDirectoryRights] "GenericAll"
+            $type = [System.Security.AccessControl.AccessControlType] "Allow"
+            $inheritanceType = [System.DirectoryServices.ActiveDirectorySecurityInheritance] "All"
+
+            $adc = Get-ADComputer $ClusterName
+            $sid = [System.Security.Principal.SecurityIdentifier] $adc.SID
+            $identity = [System.Security.Principal.IdentityReference] $SID
+            $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule $identity, $adRights, $type, $inheritanceType
+            # Add the ACE to the ACL, then set the ACL to save the changes
+            $acl.AddAccessRule($ace)
+            Set-Acl -AclObject $acl "ad:CN=$vco,$ObjectPath"
+            Write-Verbose "Granted 'Full Control' to $ClusterName on Virtual cluster object $vco"
+        }
+        catch {
+            Write-Error -Exception $_.Exception -Message "Error granting access to cluster object"
+        }
+    }
+
     #disable computer accounts
     if (!($doNotDisableAccounts.isPresent)) {
         foreach ($c in $Computer) {
@@ -122,5 +200,20 @@ if ($action -eq 'delete') {
     catch {
         Write-Error -Exception $_.Exception -Message "Error deleting cluster object"
     }
+
+    #delete virtual cluster objects
+    foreach ($vco in $VirtualClusterObject) {
+        try {
+            Remove-ADObject -Identity "CN=$vco,$ObjectPath" -Confirm:$False -Recursive
+            Write-Verbose "Deleted $vco virtual cluster object"
+        }
+        catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
+            Write-Warning "Virtual cluster object $vco was not found"
+        }
+        catch {
+            Write-Error -Exception $_.Exception -Message "Error deleting virtual cluster object"
+        }
+    }
+
     Write-Output "Deleted Active Directory objects"
 }
