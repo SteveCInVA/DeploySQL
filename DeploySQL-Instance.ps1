@@ -926,25 +926,6 @@ Configuration ConfigureAG
             InstanceName         = $SQLInstance
             PsDscRunAsCredential = $InstallCredential
         }
-        # Ensure SQL Agent account is granted access to server
-        SqlLogin Add_WindowsUserSQLAgentAcct {
-            Ensure               = 'Present'
-            Name                 = $SQLAgentServiceAccount.userName
-            ServerName           = $Node.NodeName
-            LoginType            = 'WindowsUser'
-            InstanceName         = $SQLInstance
-            PsDscRunAsCredential = $InstallCredential
-        }
-        # Ensure cluster account is granted access to server
-        SqlLogin Add_WindowsUserClusSvc {
-            Ensure               = 'Present'
-            Name                 = 'NT Service\ClusSvc'
-            ServerName           = $Node.NodeName
-            LoginType            = 'WindowsUser'
-            InstanceName         = $SQLInstance
-            PsDscRunAsCredential = $InstallCredential
-        }
-
         # Add the required permissions to the sql engine service login
         SqlPermission AddNTServiceSQLEngineSvcPermissions {
             DependsOn            = '[SqlLogin]Add_WindowsUserSQLEngineAcct'
@@ -955,14 +936,38 @@ Configuration ConfigureAG
             Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
             PsDscRunAsCredential = $InstallCredential
         }
-        # Add the required permissions to the sql agent service login
-        SqlPermission AddNTServiceSQLAgentSvcPermissions {
-            DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
+
+        #failure identified if the user specified the same account for the sql engine and sql agent.
+        #determined root issue was a duplicate key in the generated mof file.
+        if ($SQLEngineServiceAccount.userName -ne $SQLAgentServiceAccount.userName) {
+            # Ensure SQL Agent account is granted access to server
+            SqlLogin Add_WindowsUserSQLAgentAcct {
+                Ensure               = 'Present'
+                Name                 = $SQLAgentServiceAccount.userName
+                ServerName           = $Node.NodeName
+                LoginType            = 'WindowsUser'
+                InstanceName         = $SQLInstance
+                PsDscRunAsCredential = $InstallCredential
+            }
+            # Add the required permissions to the sql agent service login
+            SqlPermission AddNTServiceSQLAgentSvcPermissions {
+                DependsOn            = '[SqlLogin]Add_WindowsUserSQLAgentAcct'
+                Ensure               = 'Present'
+                ServerName           = $Node.NodeName
+                InstanceName         = $SQLInstance
+                Principal            = $SQLAgentServiceAccount.userName
+                Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
+                PsDscRunAsCredential = $InstallCredential
+            }
+        }
+
+        # Ensure cluster account is granted access to server
+        SqlLogin Add_WindowsUserClusSvc {
             Ensure               = 'Present'
+            Name                 = 'NT Service\ClusSvc'
             ServerName           = $Node.NodeName
+            LoginType            = 'WindowsUser'
             InstanceName         = $SQLInstance
-            Principal            = $SQLAgentServiceAccount.userName
-            Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndpoint', 'ConnectSQL'
             PsDscRunAsCredential = $InstallCredential
         }
         # Add the required permissions to the cluster service login
@@ -975,6 +980,7 @@ Configuration ConfigureAG
             Permission           = 'AlterAnyAvailabilityGroup', 'ViewServerState'
             PsDscRunAsCredential = $InstallCredential
         }
+
         # Ensure the HADR option is enabled for the instance
         SqlAlwaysOnService EnableHADR {
             Ensure               = 'Present'
