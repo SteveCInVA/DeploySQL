@@ -70,3 +70,30 @@ function Test-DirectoryStructure {
         return $false
     }
 }
+
+function Test-ScriptIntegrity{
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $False)]
+        [string]$InstallMediaPath = $pwd
+    )
+
+    Write-Verbose "Checking integrity of scripts..."
+    Import-Module $InstallMediaPath\helperFunctions\Tools.psm1
+
+    $path = "$InstallMediaPath\PSModules\PendingReboot"
+    write-verbose "Testing $path"
+    if ('40E0AAD21BE1ECDE7888F2DA2D2404CCF97FC0BA5490FC5060804BF0E2D544F2' -ne (Get-FolderHash -Path $path)){
+        Write-Warning "Script differences found in: $path"
+        $ret = $false
+    }
+
+    if ($null -eq $ret) {
+        Write-Verbose "Successfully validated script integrity"
+        return $true
+    }
+    else {
+        return $false
+    }
+
+}

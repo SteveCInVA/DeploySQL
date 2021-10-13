@@ -42,7 +42,7 @@ function CopyFiles {
     }
 }
 
-function GetFolderFileHash {
+function GetFileHashes {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory = $true)]
@@ -66,4 +66,23 @@ function GetFolderFileHash {
     catch {
         Write-Warning $_.Exception.Message
     }
+}
+
+function Get-FolderHash {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    try {
+        $file = New-TemporaryFile
+        GetFileHashes($path) | Export-Csv $file
+        $hash = (Get-FileHash $file).Hash
+        Remove-Item -Path $file
+        return $hash
+    }
+    catch {
+        Write-Warning $_.Exception.Message
+    }
+
 }
