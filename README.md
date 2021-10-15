@@ -55,11 +55,35 @@ Using the power of Desired State Configuration, the following actions can be per
 |SkipSQLAGListenerCreation|switch|Optional|If present will skip configuration of the SQL Listener for the availability group.|
 |SkipSSMS|switch|Optional|If included will skip the installation of SSMS|
 |SkipPostDeployment|switch|Optional|If included will not run SQL Server post installation scripts|
-|InstallCredential|<psCredential>|Required|Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server.|
+|InstallCredential|[psCredential]|Required|Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server.|
 
-## Configuration
+## Getting Started
 
-## Examples
+1. Ensure installation files are all unblocked (if downloaded from GitHub)
+
+    Get-ChildItem [path to your folder] -recurse | Unblock-File
+
+2. Ensure powershell execution mode is set to unrestricted
+
+     Set-ExecutionPolicy Unrestricted
+
+3. Create a file share at the root of the installation path... so c:\git\deploySQL should be available at \\\computer\deploySQL
+
+4. Ensure the Active Directory Module for Windows Powershell feature is enabled
+
+5. Copy the contents of [InstallPath]\PSModules to C:\ProgramFiles\WindowsPowerShell\Modules
+
+6. Copy installation media to the [InstallPath]\InstallMedia folders as appropriate.
+
+7. Test your installation media is intact.
+
+    .\support\checksum.ps1
+
+8. Pre-stage Active Directory accounts needed for install
+
+    .\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster1' -VirtualClusterObject 'SQLAG1' -Action create -Verbose
+
+9. Review examples in .\support\Clustered Instance Install.ps1
 
 ## Assumptions
 
