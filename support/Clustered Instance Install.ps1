@@ -14,14 +14,14 @@ $InstallCredential = New-Object -TypeName System.Management.Automation.PSCredent
 
 
 $Parameters = @{
-    Computer = 'sql01a', 'sql01b', 'sql01c'
+    Computer = 'sql01a', 'sql01b'
     Instance = 'Inst1'
     SQLVersion = 'SQL2019'
-    
+
     IsInAvailabilityGroup = $True
-    ClusterName = 'SQLCluster'
+    ClusterName = 'SQLCluster1'
     #ClusterIP = 1.2.3.4
-    SQLAGName = 'AGInst1'
+    SQLAGName = 'SQLAG1'
     #SQLAGIPAddr = 1.2.3.5
     SQLAGPort = 1437
     SQLHADREndpointPort = 5024
@@ -40,21 +40,20 @@ $Parameters = @{
     SkipSSMS = $true
     AddOSAdminToHostAdmin = $true
     SkipPostDeployment = $false
-    InstallCredential = $InstallCredential 
+    InstallCredential = $InstallCredential
 }
 #Write-Output $Parameters
 .\DeploySQL-Instance.ps1 @Parameters
 
 
 <#
-.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster1' -Action create -Verbose
-.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster1' -Action delete -doNotDeleteComputerAccounts -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster1' -VirtualClusterObject 'SQLAG1' -Action create -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster1' -VirtualClusterObject 'SQLAG1' -Action delete -doNotDeleteComputerAccounts -Verbose
 
-.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b', 'sql01c' -ClusterName 'SQLCluster' -Action create  -Verbose
-.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b', 'sql01c' -ClusterName 'SQLCluster' -Action delete -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b', 'sql01c' -ClusterName 'SQLCluster1' -VirtualClusterObject 'SQLAG1' -Action create  -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b', 'sql01c' -ClusterName 'SQLCluster1' -VirtualClusterObject 'SQLAG1' -Action delete -Verbose
 
-.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster' -Action create -doNotDisableComputerAccounts -Verbose
-.\support\stage_computerObjects.ps1 -Computer 'sql01c', 'sql01d' -ClusterName 'SQLCluster2' -Action create -doNotDisableComputerAccounts -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01a', 'sql01b' -ClusterName 'SQLCluster' -Action create -doNotDisableAccounts -Verbose
+.\support\stage_computerObjects.ps1 -Computer 'sql01c', 'sql01d' -ClusterName 'SQLCluster2' -Action create -doNotDisableAccounts -Verbose
 .\support\stage_computerObjects.ps1 -Computer 'sql01c', 'sql01d' -ClusterName 'SQLCluster2' -Action delete
-
 #>
