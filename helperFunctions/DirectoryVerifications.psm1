@@ -116,7 +116,12 @@ function Test-ScriptIntegrity{
         $ret = $false
     }
 
-#TODO:  resolve which version of PSFramework is needed and add in correct test
+    $path = "$InstallMediaPath\PSModules\PSFramework"
+    write-verbose "Testing $path"
+    if ('82AFC9F97DDB9BC43CA95144C2C2F1C8C38F4F12A7A41F28E13AA35013937CAD' -ne (Get-FolderHash -Path $path)){
+        Write-Warning "Script differences found in: $path"
+        $ret = $false
+    }
 
     $path = "$InstallMediaPath\PSModules\SqlServer"
     write-verbose "Testing $path"
