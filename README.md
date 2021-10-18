@@ -55,6 +55,7 @@ Using the power of Desired State Configuration, the following actions can be per
 |SkipSQLAGListenerCreation|switch|Optional|If present will skip configuration of the SQL Listener for the availability group.|
 |SkipSSMS|switch|Optional|If included will skip the installation of SSMS|
 |SkipPostDeployment|switch|Optional|If included will not run SQL Server post installation scripts|
+|SkipInstallIntegrityCheck|switch|Optional|If included will not run checksum verifications of required Powershell modules|
 |InstallCredential|[psCredential]|Required|Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server.|
 
 ## Getting Started
