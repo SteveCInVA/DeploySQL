@@ -229,7 +229,7 @@ if ((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq
 #check powershell modules to ensure content is as expected.
 if ($SkipInstallIntegrityCheck.IsPresent -eq $false) {
     if ((Test-ScriptIntegrity -InstallMediaPath $dir -Verbose) -eq $false) {
-        Write-Warning "Key PowerShell modules missing or modified from expected version."
+        Write-Warning "Key PowerShell modules missing or modified from the expected version."
         $valid = $false
     }
 }
