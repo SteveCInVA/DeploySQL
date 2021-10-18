@@ -95,6 +95,8 @@ Script that was developed by the SQL team to deploy SQL Server in a known config
 
  [-SkipPostDeployment] - switch that if included will not run SQL Server post installation scripts
 
+ [-SkipInstallIntegrityCheck] - switch that if included with not run the checksum of PSModules
+
  -InstallCredential <psCredential> - Credential used to install SQL Server and perform all configurations. Account should be a member of the group specified in -DBATeamGroup as well as a local administrator of the target server.
 
  .EXAMPLE
@@ -126,6 +128,7 @@ Script that was developed by the SQL team to deploy SQL Server in a known config
  2021/09/01 - 1.4.0 - Add support for availability groups
  2021/09/02 - 1.4.1 - Added support to skip availability group listener creation
  2021/09/03 - 1.4.2 - Fixed issue with overlapping ports with HADR_Endpoints
+ 2021/10/18 - 1.5.0 - Added install integrity check
 
  This script makes some directory assumptions:
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed.
@@ -195,12 +198,14 @@ param (
 
     [Switch]$SkipPostDeployment,
 
+    [Switch]$SkipInstallIntegrityCheck,
+
     [Parameter (Mandatory = $false)]
     [System.Management.Automation.PSCredential]
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN)
 )
 
-$scriptVersion = '1.4.2'
+$scriptVersion = '1.5.0'
 $InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K"
 $StartTime = $(Get-Date)
 
@@ -217,8 +222,16 @@ Import-Module $dir\helperFunctions\Tools.psm1
 
 #check if basic directory structure is present
 if ((Test-DirectoryStructure -InstallMediaPath $dir -SQLVersion $SQLVersion) -eq $false) {
-    Write-Warning "Key installation directories missing."
+    Write-Warning "Key installation directories missing. Unable to find SQL Server installation media at $dir"
     $valid = $false
+}
+
+#check powershell modules to ensure content is as expected.
+if ($SkipInstallIntegrityCheck.IsPresent -eq $false) {
+    if ((Test-ScriptIntegrity -InstallMediaPath $dir -Verbose) -eq $false) {
+        Write-Warning "Key PowerShell modules missing or modified from expected version."
+        $valid = $false
+    }
 }
 
 #check DBA OS Admin Group exists
