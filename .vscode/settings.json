@@ -8,6 +8,7 @@
         "dbatools",
         "HADR",
         "HKEY",
+        "IPCIDR",
         "MAXDOP",
         "Mgmt",
         "msdb",

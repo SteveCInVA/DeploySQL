@@ -85,9 +85,11 @@ Script that was developed by the SQL team to deploy SQL Server in a known config
  [-IsInAvailabilityGroup] - Master switch that if enabled will create a Windows Cluster and a SQL Server Availability Group.
  [-ClusterName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of the Windows Cluster
  [-ClusterIP [System.Net.IPAddress]] - optional. if present will configure the cluster with a static IP address.  Otherwise uses DHCP.
+ [-ClusterIPCIDR] - optional.  Required if setting a Static IP address for the Cluster.  Defaults to /24
  [-SQLAGName [string]] - Required if -IsInAvailabilityGroup is specified.  Name of Availability Group
  [-SQLHADREndpointPort[UInt16]] - required if -IsInAvailabilityGroup is specified.  Port used for HADR_Endpoint
  [-SQLAGIPAddr [System.Net.IPAddress]] - optional. If Present will configure the availability group with a static IP address.  Otherwise uses DHCP.
+ [-SQLAGIPAddrNetMask [System.Net.IPAddress]] - optional.  Required if using static ip address for SQL Listener.  Defaults to 255.255.255.0
  [-SQLAGPort [UInt16]] - required if -IsInAvailabilityGroup is specified.  Port for Availability Group Listener
  [-SkipSQLAGListenerCreation] - optional.  If present will skip configuration of the SQL Listener for the availability group
 
@@ -129,6 +131,7 @@ Script that was developed by the SQL team to deploy SQL Server in a known config
  2021/09/02 - 1.4.1 - Added support to skip availability group listener creation
  2021/09/03 - 1.4.2 - Fixed issue with overlapping ports with HADR_Endpoints
  2021/10/18 - 1.5.0 - Added install integrity check
+ 2021/11/18 - 1.5.1 - Fixed issue with configuring cluster with static IP address
 
  This script makes some directory assumptions:
  1. There is a sub-folder called InstaLlMedia\SQL[XXXX] where XXXX is the SQL Server version to be deployed.
@@ -183,12 +186,16 @@ param (
     [Parameter (Mandatory = $false)]
     [System.Net.IPAddress]$ClusterIP,
     [Parameter (Mandatory = $false)]
+    [UInt16]$ClusterIPCIDR = 24,
+    [Parameter (Mandatory = $false)]
     [string]$SQLAGName,
     [Parameter (Mandatory = $false)]
     [ValidateRange(1, [UInt16]::MaxValue)]
     [UInt16]$SQLHADREndpointPort,
     [Parameter (Mandatory = $false)]
     [System.Net.IPAddress]$SQLAGIPAddr,
+    [Parameter (Mandatory = $false)]
+    [System.Net.IPAddress]$SQLAGIPAddrNetMask = 255.255.255.0,
     [Parameter (Mandatory = $false)]
     [ValidateRange(1, [UInt16]::MaxValue)]
     [UInt16]$SQLAGPort,
@@ -205,7 +212,7 @@ param (
     $InstallCredential = $host.ui.promptForCredential("Install Credential", "Please specify the credential used for service installation", $env:USERNAME, $env:USERDOMAIN)
 )
 
-$scriptVersion = '1.5.0'
+$scriptVersion = '1.5.1'
 $InstallDate = Get-Date -Format "yyyy-mm-dd HH:mm:ss K"
 $StartTime = $(Get-Date)
 
@@ -799,9 +806,11 @@ Configuration InstallSQLEngine
                 "IsInAvailabilityGroup=$IsInAvailabilityGroup",
                 "ClusterName=$ClusterName",
                 "ClusterIP=$ClusterIP",
+                "ClusterIPCIDR=$ClusterIPCIDR",
                 "SQLAGName=$SQLAGName",
                 "SQLHADREndpointPort=$SQLHADREndpointPort",
                 "SQLAGIPAddr=$SQLAGIPAddr",
+                "SQLAGIPAddrNetMask=$SQLAGIPAddrNetMask",
                 "SQLAGPort=$SQLAGPort",
                 "SkipSQLAGListenerCreation=$SkipSQLAGListenerCreation",
                 "SkipSSMS=$SkipSSMS",
@@ -1116,6 +1125,9 @@ Configuration ConfigureAG
     }
 }
 
+$ClusterIPAddr = $ClusterIP/$ClusterIPCIDR
+$SQLAGIPAddress = $SQLAGIPAddr/$SQLAGIPAddrNetMask
+
 # Setup our configuration data object that will be used by our DSC configurations
 $config = @{
     AllNodes = @(
@@ -1130,10 +1142,10 @@ $config = @{
             InstanceName                = $Instance
 
             ClusterName                 = $ClusterName
-            ClusterIP                   = $ClusterIP
+            ClusterIP                   = $ClusterIPAddr
             AvailabilityGroupName       = $SQLAGName
             HADREndpointPort            = $SQLHADREndpointPort
-            AvailabilityGroupIP         = $SQLAGIPAddr
+            AvailabilityGroupIP         = $SQLAGIPAddress
             AvailabilityGroupPort       = $SQLAGPort
             SkipSQLAGListenerCreation   = $SkipSQLAGListenerCreation.IsPresent
         }
